@@ -144,3 +144,5 @@ vite.config.ts.timestamp-*
 openspec/
 .claude/
 .opencode/
+AGENTS.md
+CLAUDE.md
