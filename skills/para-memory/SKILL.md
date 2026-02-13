@@ -301,6 +301,29 @@ When facts become outdated, create supersession chain:
 
 Preserves history while keeping active set clean.
 
+## Install QMD
+
+QMD provides local search (BM25 keyword, vector semantic, hybrid with reranking) over your memory layers. Essential once you have 10+ entities or 30+ days of daily notes.
+See references/qmd_setup.md for full installation and configuration.
+
+```bash
+bun install -g https://github.com/onesmash/qmd
+```
+
+### Add collections (one-time)
+
+```bash
+qmd collection add ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge --name knowledge
+qmd collection add ${PARA_MEMORY_ROOT:-~/para-memory}/memory --name daily
+```
+
+### Index and embed
+
+```bash
+qmd update
+qmd embed
+```
+
 ## Resources
 
 **Scripts:**
