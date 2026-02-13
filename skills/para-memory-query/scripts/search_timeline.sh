@@ -3,8 +3,8 @@
 
 set -e
 
-MEMORY_ROOT="${PARA_MEMORY_ROOT:-$HOME/para-memory/knowledge}"
-DAILY_NOTES_DIR="$MEMORY_ROOT/../memory"  # Assuming memory/ is sibling to knowledge/
+MEMORY_ROOT="${PARA_MEMORY_ROOT:-$HOME/para-memory}"
+DAILY_NOTES_DIR="$MEMORY_ROOT/memory"  # Assuming memory/ is sibling to knowledge/
 
 MODE="$1"
 shift

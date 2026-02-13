@@ -28,10 +28,24 @@ Three memory layers:
 
 ## Quick Start
 
+### Environment Configuration (Optional)
+
+Set the `PARA_MEMORY_ROOT` environment variable to customize the root directory:
+
+```bash
+# Set in your shell profile (~/.bashrc, ~/.zshrc, etc.)
+export PARA_MEMORY_ROOT=~/para-memory
+
+# Or use a custom location
+export PARA_MEMORY_ROOT=/path/to/my/memory
+```
+
+**Default:** If not set, defaults to `~/para-memory/`
+
 ### 1. Initialize System
 
 ```bash
-python scripts/init_memory_system.py base_path/knowledge
+python scripts/init_memory_system.py ${PARA_MEMORY_ROOT:-~/para-memory}
 ```
 
 Creates:
@@ -43,20 +57,20 @@ Creates:
 
 ```bash
 # Create a person entity
-python scripts/create_entity.py base_path/knowledge people "John Doe"
+python scripts/create_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge people "John Doe"
 
 # Create a company entity
-python scripts/create_entity.py base_path/knowledge companies "Acme Corp"
+python scripts/create_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge companies "Acme Corp"
 
 # Create a project entity
-python scripts/create_entity.py base_path/knowledge projects "Product Launch"
+python scripts/create_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge projects "Product Launch"
 ```
 
 ### 3. Add Facts to Entity
 
 ```bash
 # Add a fact
-python scripts/update_entity.py base_path/knowledge/areas/people/john-doe \
+python scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/john-doe \
   --add '{
     "fact": "Joined Acme Corp as CTO in March 2025",
     "category": "milestone",
@@ -66,7 +80,7 @@ python scripts/update_entity.py base_path/knowledge/areas/people/john-doe \
   }'
 
 # Supersede old fact with new one
-python scripts/update_entity.py base_path/knowledge/areas/people/john-doe \
+python scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/john-doe \
   --supersede john-doe-001 '{
     "fact": "Promoted to VP Engineering at Acme Corp",
     "category": "milestone",
@@ -80,7 +94,7 @@ python scripts/update_entity.py base_path/knowledge/areas/people/john-doe \
 
 ```bash
 # Apply memory decay, regenerate summaries, and update search index
-python scripts/weekly_synthesis.py base_path/knowledge
+python scripts/weekly_synthesis.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge
 ```
 
 ## Working with Entities
@@ -172,7 +186,7 @@ Identify facts worth preserving by category:
 For each identified fact, use `update_entity.py`:
 
 ```bash
-python scripts/update_entity.py base_path/knowledge/areas/people/john \
+python scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/john \
   --add '{
     "fact": "Leading new API project starting Q1 2026",
     "category": "status",
@@ -227,7 +241,7 @@ If conversation reveals new user patterns, update `MEMORY.md`:
 - Update `lastAccessed` and `accessCount` when facts referenced
 
 **Daily/Periodic (AI-assisted):**
-- AI reviews `base_path/memory/YYYY-MM-DD.md` for durable facts
+- AI reviews `${PARA_MEMORY_ROOT:-~/para-memory}/memory/YYYY-MM-DD.md` for durable facts
 - AI extracts and categorizes facts
 - AI adds facts to appropriate entities using `update_entity.py`
 - AI updates tacit knowledge if new patterns emerge
@@ -235,7 +249,7 @@ If conversation reveals new user patterns, update `MEMORY.md`:
 **Weekly (Automated):**
 ```bash
 # Run synthesis (automatically updates QMD index and embeddings)
-python scripts/weekly_synthesis.py base_path/knowledge
+python scripts/weekly_synthesis.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge
 ```
 
 This applies memory decay, regenerates summaries, and updates search index.

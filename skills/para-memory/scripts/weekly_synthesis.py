@@ -9,7 +9,9 @@ Sorts facts into tiers:
 
 After regenerating summaries, updates QMD search index and embeddings.
 
-Usage: python weekly_synthesis.py <base_path> [--skip-qmd]
+Usage: python weekly_synthesis.py [base_path] [--skip-qmd]
+If base_path is not provided, uses PARA_MEMORY_ROOT environment variable.
+If environment variable not set, defaults to ~/para-memory/knowledge.
 """
 
 import sys
@@ -48,13 +50,29 @@ def classify_fact(fact):
         return "cold"
 
 
+def get_base_path(provided_path=None):
+    """Get base path from argument, environment variable, or default."""
+    import os
+    from pathlib import Path
+    
+    if provided_path:
+        return Path(os.path.expanduser(provided_path))
+    
+    env_path = os.environ.get('PARA_MEMORY_ROOT')
+    if env_path:
+        return Path(os.path.expanduser(env_path))
+    
+    # Default path
+    return Path(os.path.expanduser('~/para-memory/knowledge'))
+
+
 def regenerate_summary(entity_path):
     """Regenerate summary.md from items.json with memory decay."""
     items_path = entity_path / "items.json"
     summary_path = entity_path / "summary.md"
 
     if not items_path.exists():
-        return
+        return 0, 0, 0
 
     data = json.loads(items_path.read_text())
     active_facts = [f for f in data["items"] if f.get("status") == "active"]
@@ -178,11 +196,15 @@ def main():
     skip_qmd = "--skip-qmd" in sys.argv
     args = [arg for arg in sys.argv[1:] if arg != "--skip-qmd"]
 
-    if len(args) != 1:
-        print("Usage: python weekly_synthesis.py <base_path> [--skip-qmd]")
+    # Handle 0 or 1 arguments
+    if len(args) > 1:
+        print("Usage: python weekly_synthesis.py [base_path] [--skip-qmd]")
+        print("If base_path is not provided, uses PARA_MEMORY_ROOT environment variable.")
+        print("If environment variable not set, defaults to ~/para-memory/knowledge.")
         sys.exit(1)
-
-    base_path = Path(args[0])
+    
+    base_path_arg = args[0] if len(args) == 1 else None
+    base_path = get_base_path(base_path_arg)
 
     if not base_path.exists():
         print(f"Error: Path not found: {base_path}")

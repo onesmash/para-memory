@@ -3,7 +3,7 @@
 
 set -e
 
-MEMORY_ROOT="${PARA_MEMORY_ROOT:-$HOME/para-memory/knowledge}"
+MEMORY_ROOT="${PARA_MEMORY_ROOT/knowledge:-$HOME/para-memory/knowledge}"
 ENTITY_PATH="$1"
 FILTER="${2:-.}"  # Default to showing all facts
 

@@ -17,7 +17,7 @@ This document provides examples of common queries and recommended search strateg
 **User query**: "What do I know about John?"
 
 **Strategy**:
-1. First check if entity exists: `~/para-memory/knowledge/areas/people/john/`
+1. First check if entity exists: `${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/john/`
 2. Read `summary.md` for quick overview
 3. If more detail needed, query `items.json`:
    ```bash
@@ -29,7 +29,7 @@ This document provides examples of common queries and recommended search strateg
 **User query**: "What's the status of the website redesign?"
 
 **Strategy**:
-1. Search for project: `~/para-memory/knowledge/projects/website-redesign/`
+1. Search for project: `${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/projects/website-redesign/`
 2. Read `summary.md` for current status
 3. Filter for status facts:
    ```bash
@@ -87,7 +87,7 @@ scripts/search_timeline.sh range 2026-02-03 2026-02-10
 **User query**: "How do I like to brainstorm?"
 
 **Strategy**:
-1. Read tacit knowledge file: `~/para-memory/tacit/preferences.md`
+1. Read tacit knowledge file: `${PARA_MEMORY_ROOT:-~/para-memory}/MEMORY.md`
 2. Or search with QMD:
    ```bash
    scripts/search_qmd.sh "brainstorming preferences" tacit
@@ -101,7 +101,7 @@ scripts/search_timeline.sh range 2026-02-03 2026-02-10
 Search tacit knowledge for tool preferences using Grep:
 ```
 pattern: "editor|IDE|coding tool"
-path: ~/para-memory/tacit/
+path: ${PARA_MEMORY_ROOT:-~/para-memory}/MEMORY.md
 ```
 
 ## Cross-Entity Queries
@@ -111,7 +111,7 @@ path: ~/para-memory/tacit/
 **User query**: "What have I discussed with Jane recently?"
 
 **Strategy**:
-1. Read person's summary: `~/para-memory/knowledge/areas/people/jane/summary.md`
+1. Read person's summary: `${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/jane/summary.md`
 2. Query related facts:
    ```bash
    scripts/query_entity.sh areas/people/jane '.[] | select(.category == "context")'
@@ -126,11 +126,11 @@ path: ~/para-memory/tacit/
 **User query**: "What projects am I doing for Acme Corp?"
 
 **Strategy**:
-1. Read company entity: `~/para-memory/knowledge/areas/companies/acme/summary.md`
+1. Read company entity: `${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/companies/acme/summary.md`
 2. Search for related projects using Grep:
    ```
    pattern: "acme"
-   path: ~/para-memory/knowledge/projects/
+   path: ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/projects/
    ```
 
 ## Status and State Queries
@@ -151,7 +151,7 @@ path: ~/para-memory/tacit/
 **User query**: "What projects did I complete last year?"
 
 **Strategy**:
-1. Check archives: `~/para-memory/knowledge/archives/`
+1. Check archives: `${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/archives/`
 2. Use QMD to search by date:
    ```bash
    scripts/search_qmd.sh "completed 2025" knowledge

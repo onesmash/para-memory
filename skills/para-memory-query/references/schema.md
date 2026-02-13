@@ -18,8 +18,7 @@ para-memory/
 │   ├── 2026-01-28.md
 │   ├── 2026-01-29.md
 │   └── ...
-└── tacit/               # User patterns and preferences
-    └── preferences.md
+└── MEMORY.md               # User patterns and preferences
 ```
 
 ## Entity Files

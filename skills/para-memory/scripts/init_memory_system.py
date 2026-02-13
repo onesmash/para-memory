@@ -2,10 +2,13 @@
 """
 Initialize PARA memory system directory structure.
 
-Usage: python init_memory_system.py <base_path>
+Usage: python init_memory_system.py [base_path]
+If base_path is not provided, uses PARA_MEMORY_ROOT environment variable.
+If environment variable not set, defaults to ~/para-memory
 """
 
 import sys
+import os
 from pathlib import Path
 from datetime import datetime
 
@@ -16,11 +19,12 @@ def create_directory_structure(base_path):
 
     # Main PARA directories
     directories = [
-        "projects",
-        "areas/people",
-        "areas/companies",
-        "resources",
-        "archives"
+        "memory",
+        "knowledge/projects",
+        "knowledge/areas/people",
+        "knowledge/areas/companies",
+        "knowledge/resources",
+        "knowledge/archives"
     ]
 
     for dir_path in directories:
@@ -31,28 +35,44 @@ def create_directory_structure(base_path):
 
 This knowledge graph uses the PARA method to organize entities:
 
-- **Projects/** - Active work with clear goals/deadlines
-- **Areas/** - Ongoing responsibilities (no end date)
+- **projects/** - Active work with clear goals/deadlines
+- **areas/** - Ongoing responsibilities (no end date)
   - people/ - Individuals you know
   - companies/ - Organizations you work with
-- **Resources/** - Topics of interest, reference material
-- **Archives/** - Inactive items from any category
-
+- **resources/** - Topics of interest, reference material
+- **archives/** - Inactive items from any category
 Each entity has:
 - `summary.md` - Quick overview (loaded first)
 - `items.json` - Atomic facts (loaded as needed)
 """
-    (base / "index.md").write_text(index_content)
+    (base / "knowledge/index.md").write_text(index_content)
 
     return base
 
 
-def main():
-    if len(sys.argv) != 2:
-        print("Usage: python init_memory_system.py <base_path>")
-        sys.exit(1)
+def get_base_path(provided_path=None):
+    """Get base path from argument, environment variable, or default."""
+    if provided_path:
+        return Path(os.path.expanduser(provided_path))
+    
+    env_path = os.environ.get('PARA_MEMORY_ROOT')
+    if env_path:
+        return Path(os.path.expanduser(env_path))
+    
+    # Default path
+    return Path(os.path.expanduser('~/para-memory'))
 
-    base_path = sys.argv[1]
+
+def main():
+    # Handle 0 or 1 arguments
+    if len(sys.argv) > 2:
+        print("Usage: python init_memory_system.py [base_path]")
+        print("If base_path is not provided, uses PARA_MEMORY_ROOT environment variable.")
+        print("If environment variable not set, defaults to ~/para-memory.")
+        sys.exit(1)
+    
+    base_path_arg = sys.argv[1] if len(sys.argv) == 2 else None
+    base_path = get_base_path(base_path_arg)
 
     print(f"Initializing memory system at: {base_path}")
 

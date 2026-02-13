@@ -15,7 +15,19 @@ This skill enables querying a structured memory system with three distinct layer
 2. **Daily Notes** - Chronological timeline of events in dated markdown files (YYYY-MM-DD.md)
 3. **Tacit Knowledge** - User patterns, preferences, and working style
 
-**Default memory location**: `~/para-memory/knowledge/` (configure with `PARA_MEMORY_ROOT` environment variable)
+### Environment Configuration (Optional)
+
+Set the `PARA_MEMORY_ROOT` environment variable to customize the root directory:
+
+```bash
+# Set in your shell profile (~/.bashrc, ~/.zshrc, etc.)
+export PARA_MEMORY_ROOT=~/para-memory
+
+# Or use a custom location
+export PARA_MEMORY_ROOT=/path/to/my/memory
+```
+
+**Default:** If not set, defaults to `~/para-memory/`
 
 ## Query Decision Tree
 
@@ -39,10 +51,10 @@ Is this about...
 For queries about people, projects, or companies:
 
 1. **Check if entity exists** in PARA structure:
-   - People: `~/para-memory/knowledge/areas/people/<name>/`
-   - Projects: `~/para-memory/knowledge/projects/<name>/`
-   - Companies: `~/para-memory/knowledge/areas/companies/<name>/`
-   - Resources: `~/para-memory/knowledge/resources/<topic>/`
+   - People: `${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/<name>/`
+   - Projects: `${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/projects/<name>/`
+   - Companies: `${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/companies/<name>/`
+   - Resources: `${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/resources/<topic>/`
 
 2. **Read summary.md first** for quick overview (always start here)
 
@@ -151,6 +163,6 @@ For detailed schema and format specifications, see [schema.md](references/schema
 
 **Quick reference**:
 - Each entity has `summary.md` (overview) and `items.json` (facts array)
-- Daily notes: `~/para-memory/memory/YYYY-MM-DD.md`
-- Tacit knowledge: `~/para-memory/tacit/preferences.md`
+- Daily notes: `${PARA_MEMORY_ROOT:-~/para-memory}/memory/YYYY-MM-DD.md`
+- Tacit knowledge: `${PARA_MEMORY_ROOT:-~/para-memory}/MEMORY.md`
 - PARA categories: `projects/`, `areas/`, `resources/`, `archives/`
