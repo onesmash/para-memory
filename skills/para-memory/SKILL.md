@@ -230,7 +230,7 @@ If conversation reveals new user patterns, update `MEMORY.md`:
 3. For each fact:
    - Check if entity exists, create if needed
    - Check if fact supersedes existing, use --supersede if so
-   - Add fact with proper category, timestamp, source
+   - Add fact with proper category, timestamp (when fact occurred), source
 4. Update tacit knowledge if new patterns emerged
 ```
 
