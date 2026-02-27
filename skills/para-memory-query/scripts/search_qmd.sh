@@ -14,17 +14,17 @@ fi
 
 # Perform search based on collection
 case "$COLLECTION" in
-    knowledge|life)
-        echo "Searching knowledge graph (life collection)..."
-        qmd query "$QUERY" -c life
+    knowledge)
+        echo "Searching knowledge graph..."
+        qmd query "$QUERY" -c knowledge
         ;;
-    memory|daily)
-        echo "Searching daily notes (memory collection)..."
-        qmd query "$QUERY" -c memory
+    daily)
+        echo "Searching daily notes..."
+        qmd query "$QUERY" -c daily
         ;;
-    tacit|clawd)
-        echo "Searching tacit knowledge (clawd collection)..."
-        qmd query "$QUERY" -c clawd
+    tacit)
+        echo "Searching tacit knowledge..."
+        qmd query "$QUERY" -c tacit
         ;;
     all|*)
         echo "Searching all collections..."

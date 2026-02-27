@@ -49,6 +49,7 @@ Add descriptive metadata to help search understand your content:
 ```bash
 qmd context add qmd://knowledge "PARA-organized entities: people, companies, projects with atomic facts"
 qmd context add qmd://daily "Daily conversation timeline and event log"
+qmd context add qmd://tacit "Long term memory"
 ```
 
 ## Indexing

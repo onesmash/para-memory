@@ -100,7 +100,7 @@ scripts/search_qmd.sh "pricing strategy discussion"
 
 **Search specific layer**:
 - Knowledge graph: `scripts/search_qmd.sh "John's role" knowledge`
-- Daily notes: `scripts/search_qmd.sh "started project" memory`
+- Daily notes: `scripts/search_qmd.sh "started project" daily`
 - Tacit knowledge: `scripts/search_qmd.sh "coding preferences" tacit`
 
 **Note**: QMD must be installed and collections configured. Falls back to Grep/Glob if unavailable.

@@ -313,8 +313,9 @@ bun install -g https://github.com/onesmash/qmd
 ### Add collections (one-time)
 
 ```bash
-qmd collection add ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge --name knowledge
-qmd collection add ${PARA_MEMORY_ROOT:-~/para-memory}/memory --name daily
+qmd collection add ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge --name knowledge --mask "**/*.{md,json}"
+qmd collection add ${PARA_MEMORY_ROOT:-~/para-memory}/memory --name daily --mask "**/*.md"
+qmd collection add ${PARA_MEMORY_ROOT:-~/para-memory} --name tacit --mask "MEMORY.md"
 ```
 
 ### Index and embed
