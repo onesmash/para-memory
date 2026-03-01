@@ -97,6 +97,18 @@ python scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/are
 python scripts/weekly_synthesis.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge
 ```
 
+### 5. Register SessionEnd Hook
+
+Automatically saves each conversation as a markdown file in `${PARA_MEMORY_ROOT:-~/para-memory}/memory/sessions/` when a Claude Code session ends.
+
+Run the installer to copy scripts to `~/.claude/hooks/para-memory/` and register the hook:
+
+```bash
+python skills/para-memory/scripts/install_hooks.py
+```
+
+This copies `save_chat_history.py` to `~/.claude/hooks/para-memory/` and updates `~/.claude/settings.json` to point to it, decoupling the hook from the repo location.
+
 ## Working with Entities
 
 ### Entity Structure
@@ -332,6 +344,7 @@ qmd embed
 - `create_entity.py` - Create new entity with templates
 - `update_entity.py` - Add/supersede facts
 - `weekly_synthesis.py` - Apply memory decay, regenerate summaries
+- `save_chat_history.py` - SessionEnd hook: save raw conversation to per-session markdown file
 
 **References:**
 - `schema.md` - Complete atomic fact schema and examples
