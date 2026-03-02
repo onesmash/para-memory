@@ -12,6 +12,7 @@ Output: ${PARA_MEMORY_ROOT:-~/para-memory}/memory/sessions/YYYY-MM-DD-<shortId>-
 import json
 import os
 import re
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -158,8 +159,7 @@ def run(transcript_path: str) -> None:
         short_id = p.stem[:8]
         session_file = sessions_dir / f"{today}-{short_id}-session.md"
         sessions_dir.mkdir(parents=True, exist_ok=True)
-        content = p.read_text(encoding="utf-8")
-        session_file.write_text(content, encoding="utf-8")
+        shutil.copy2(p, session_file)
         print(f"[SessionEnd] Copied txt to session file: {session_file}", file=sys.stderr)
         return
 
