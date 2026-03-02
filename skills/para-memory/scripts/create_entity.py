@@ -102,24 +102,45 @@ def main():
     clean_name = name.lower().replace(" ", "-")
     entity_path = base_path / category_path / clean_name
 
+    summary_file = entity_path / "summary.md"
+    items_file = entity_path / "items.json"
+    
+    # Check if entity exists and is complete
     if entity_path.exists():
-        print(f"Error: Entity already exists at {entity_path}")
-        sys.exit(1)
+        # Check if directory is incomplete (missing required files)
+        missing_files = []
+        if not summary_file.exists():
+            missing_files.append("summary.md")
+        if not items_file.exists():
+            missing_files.append("items.json")
+        
+        if missing_files:
+            # Directory exists but is incomplete - initialize missing files
+            print(f"⚠️  Entity directory exists but is incomplete at {entity_path}")
+            print(f"   Missing files: {', '.join(missing_files)}")
+            print(f"   Initializing missing files...")
+        else:
+            # Directory is complete - refuse to overwrite
+            print(f"Error: Entity already exists and is complete at {entity_path}")
+            print(f"   Use update_entity.py to modify existing entity")
+            sys.exit(1)
+    else:
+        # Create new directory
+        entity_path.mkdir(parents=True, exist_ok=True)
 
-    entity_path.mkdir(parents=True, exist_ok=True)
+    # Create or update summary.md if missing
+    if not summary_file.exists():
+        summary_content = create_summary(name, category)
+        summary_file.write_text(summary_content)
 
-    # Create summary.md
-    summary_content = create_summary(name, category)
-    (entity_path / "summary.md").write_text(summary_content)
-
-    # Create items.json
-    entity_id = generate_entity_id(category, name)
-    items_data = create_items_json(entity_id)
-    (entity_path / "items.json").write_text(json.dumps(items_data, indent=2, ensure_ascii=False))
+    # Create or update items.json if missing
+    if not items_file.exists():
+        entity_id = generate_entity_id(category, name)
+        items_data = create_items_json(entity_id)
+        items_file.write_text(json.dumps(items_data, indent=2, ensure_ascii=False))
 
     print(f"✓ Created entity: {name}")
     print(f"  Location: {entity_path}")
-    print(f"  Entity ID: {entity_id}")
     print(f"\nNext steps:")
     print(f"1. Edit {entity_path}/summary.md to add overview")
     print(f"2. Use update_entity.py to add facts")
