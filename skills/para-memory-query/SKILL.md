@@ -157,6 +157,35 @@ For detailed examples and strategies, see [query-patterns.md](references/query-p
 - "How do I prefer to brainstorm?" → Search tacit knowledge
 - "List all active projects" → Glob `**/projects/*/summary.md`
 
+## Install PreToolUse Hook
+
+Automatically inject relevant memory context before every Grep, Glob, or Bash search in Claude Code sessions.
+
+**Install:**
+```bash
+python skills/para-memory-query/scripts/install_hooks.py
+```
+
+This copies four files to `~/.claude/hooks/para-memory/` and registers a `PreToolUse` entry in `~/.claude/settings.json`:
+
+```json
+"PreToolUse": [{
+  "matcher": "Grep|Glob|Bash",
+  "hooks": [{"type": "command", "command": "python ~/.claude/hooks/para-memory/para-memory-query-hook.py"}],
+  "description": "Inject memory context before code searches"
+}]
+```
+
+**What it does:** Before each Grep/Glob/Bash call, the hook extracts the search keyword, queries timeline notes and semantic search, then injects a `## Memory Context` block into Claude's context if relevant results are found.
+
+**Manual test:**
+```bash
+echo '{"hook_event_name":"PreToolUse","tool_name":"Grep","tool_input":{"pattern":"authentication"}}' \
+  | python ~/.claude/hooks/para-memory/para-memory-query-hook.py
+```
+
+---
+
 ## File Structure Reference
 
 For detailed schema and format specifications, see [schema.md](references/schema.md).
