@@ -221,6 +221,9 @@ def main() -> None:
     except (json.JSONDecodeError, EOFError, ValueError):
         sys.exit(0)
 
+    if hook_input.get("stop_hook_active"):
+        sys.exit(0)
+
     transcript_path = hook_input.get("transcript_path") or os.environ.get(
         "CLAUDE_TRANSCRIPT_PATH"
     )
