@@ -83,6 +83,7 @@ def main():
     
     # Get resolved base path
     base_path = base_path if base_path else get_default_base_path()
+    base_path = Path(base_path)  # Convert to Path object
 
     # Validate category
     valid_categories = {
