@@ -28,6 +28,8 @@ Three memory layers:
 
 ## Quick Start
 
+All scripts are in `{base_dir}/scripts/` (where `{base_dir}` is shown in "Base directory for this skill:" at the top of this context).
+
 ### Environment Configuration (Optional)
 
 Set the `PARA_MEMORY_ROOT` environment variable to customize the root directory:
@@ -45,7 +47,7 @@ export PARA_MEMORY_ROOT=/path/to/my/memory
 ### 1. Initialize System
 
 ```bash
-python scripts/init_memory_system.py ${PARA_MEMORY_ROOT:-~/para-memory}
+python {base_dir}/scripts/init_memory_system.py ${PARA_MEMORY_ROOT:-~/para-memory}
 ```
 
 Creates:
@@ -57,20 +59,20 @@ Creates:
 
 ```bash
 # Create a person entity
-python scripts/create_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge people "John Doe"
+python {base_dir}/scripts/create_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge people "John Doe"
 
 # Create a company entity
-python scripts/create_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge companies "Acme Corp"
+python {base_dir}/scripts/create_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge companies "Acme Corp"
 
 # Create a project entity
-python scripts/create_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge projects "Product Launch"
+python {base_dir}/scripts/create_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge projects "Product Launch"
 ```
 
 ### 3. Add Facts to Entity
 
 ```bash
 # Add a fact
-python scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/john-doe \
+python {base_dir}/scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/john-doe \
   --add '{
     "fact": "Joined Acme Corp as CTO in March 2025",
     "category": "milestone",
@@ -80,7 +82,7 @@ python scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/are
   }'
 
 # Supersede old fact with new one
-python scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/john-doe \
+python {base_dir}/scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/john-doe \
   --supersede john-doe-001 '{
     "fact": "Promoted to VP Engineering at Acme Corp",
     "category": "milestone",
@@ -94,7 +96,7 @@ python scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/are
 
 ```bash
 # Apply memory decay, regenerate summaries, and update search index
-python scripts/weekly_synthesis.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge
+python {base_dir}/scripts/weekly_synthesis.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge
 ```
 
 ### 5. Register SessionEnd Hook
@@ -104,7 +106,7 @@ Automatically saves each conversation as a markdown file in `${PARA_MEMORY_ROOT:
 Run the installer to copy scripts to `~/.claude/hooks/para-memory/` and register the hook:
 
 ```bash
-python skills/para-memory/scripts/install_hooks.py
+python {base_dir}/scripts/install_hooks.py
 ```
 
 This copies `save_chat_history.py` to `~/.claude/hooks/para-memory/` and updates `~/.claude/settings.json` to point to it, decoupling the hook from the repo location.
@@ -198,7 +200,7 @@ Identify facts worth preserving by category:
 For each identified fact, use `update_entity.py`:
 
 ```bash
-python scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/john \
+python {base_dir}/scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/john \
   --add '{
     "fact": "Leading new API project starting Q1 2026",
     "category": "status",
@@ -261,7 +263,7 @@ If conversation reveals new user patterns, update `MEMORY.md`:
 **Weekly (Automated):**
 ```bash
 # Run synthesis (automatically updates QMD index and embeddings)
-python scripts/weekly_synthesis.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge
+python {base_dir}/scripts/weekly_synthesis.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge
 ```
 
 This applies memory decay, regenerates summaries, and updates search index.
