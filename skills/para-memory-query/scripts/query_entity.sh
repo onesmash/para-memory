@@ -3,7 +3,7 @@
 
 set -e
 
-MEMORY_ROOT="${PARA_MEMORY_ROOT:-$HOME/para-memory/knowledge}"
+MEMORY_ROOT="${PARA_MEMORY_ROOT:-$HOME/para-memory}"
 ENTITY_PATH="$1"
 FILTER="${2:-.}"  # Default to showing all facts
 
@@ -16,7 +16,7 @@ if [ -z "$ENTITY_PATH" ]; then
 fi
 
 # Construct full path to items.json
-ITEMS_FILE="$MEMORY_ROOT/$ENTITY_PATH/items.json"
+ITEMS_FILE="$MEMORY_ROOT/knowledge/$ENTITY_PATH/items.json"
 
 if [ ! -f "$ITEMS_FILE" ]; then
     echo "Error: Entity file not found: $ITEMS_FILE"
