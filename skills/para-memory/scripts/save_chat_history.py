@@ -49,9 +49,14 @@ def extract_text(content) -> str:
     return ""
 
 
-def parse_transcript(transcript_path: str) -> tuple[list[dict], dict]:
+def parse_transcript(
+    transcript_path: str, fallback_meta: dict | None = None
+) -> tuple[list[dict], dict]:
     """
-    Parse a Claude Code JSONL transcript.
+    Parse a JSONL transcript from either Claude Code or Cursor.
+
+    Claude Code entries use {"type": "user"|"assistant", "sessionId": ..., "cwd": ...}.
+    Cursor entries use {"role": "user"|"assistant"} with no session metadata inline.
 
     Returns:
         messages: [{"role": "user"|"assistant", "text": str}, ...]
@@ -74,6 +79,7 @@ def parse_transcript(transcript_path: str) -> tuple[list[dict], dict]:
             parse_errors += 1
             continue
 
+        # Claude Code inline metadata
         if not meta["session_id"] and entry.get("sessionId"):
             meta["session_id"] = entry["sessionId"]
         if not meta["slug"] and entry.get("slug"):
@@ -81,7 +87,8 @@ def parse_transcript(transcript_path: str) -> tuple[list[dict], dict]:
         if not meta["cwd"] and entry.get("cwd"):
             meta["cwd"] = entry["cwd"]
 
-        entry_type = entry.get("type", "")
+        # Support both Claude Code ("type") and Cursor ("role") formats
+        entry_type = entry.get("type") or entry.get("role", "")
 
         # User messages (skip isMeta entries)
         if entry_type == "user" and not entry.get("isMeta"):
@@ -111,7 +118,7 @@ def parse_transcript(transcript_path: str) -> tuple[list[dict], dict]:
                     if file_path and tool_name in ("Edit", "Write"):
                         files_modified.add(file_path)
 
-        # Direct tool_use entries
+        # Direct tool_use entries (Claude Code only)
         elif entry_type == "tool_use" or entry.get("tool_name"):
             tool_name = entry.get("tool_name") or entry.get("name") or ""
             if tool_name:
@@ -126,6 +133,12 @@ def parse_transcript(transcript_path: str) -> tuple[list[dict], dict]:
 
     if parse_errors:
         print(f"[SessionEnd] Skipped {parse_errors} unparseable lines", file=sys.stderr)
+
+    # Fill missing metadata from hook input (Cursor doesn't embed these in transcript)
+    if fallback_meta:
+        for key in ("session_id", "slug", "cwd"):
+            if not meta[key] and fallback_meta.get(key):
+                meta[key] = fallback_meta[key]
 
     meta["tools_used"] = sorted(tools_used)
     meta["files_modified"] = sorted(files_modified)
@@ -149,7 +162,7 @@ def build_conversation(messages: list[dict]) -> str:
 # Session file management  (mirrors the JS reference)
 # ---------------------------------------------------------------------------
 
-def run(transcript_path: str) -> None:
+def run(transcript_path: str, fallback_meta: dict | None = None) -> None:
     p = Path(transcript_path)
 
     # .txt files: copy content directly
@@ -163,8 +176,8 @@ def run(transcript_path: str) -> None:
         print(f"[SessionEnd] Copied txt to session file: {session_file}", file=sys.stderr)
         return
 
-    # Default: parse as JSONL
-    messages, meta = parse_transcript(transcript_path)
+    # Default: parse as JSONL (supports both Claude Code and Cursor formats)
+    messages, meta = parse_transcript(transcript_path, fallback_meta)
 
     # Skip trivial sessions (fewer than 2 meaningful exchanges)
     if sum(1 for m in messages if len(m["text"]) > 20) < 2:
@@ -230,7 +243,14 @@ def main() -> None:
     if not transcript_path or not Path(transcript_path).exists():
         sys.exit(0)
 
-    run(transcript_path)
+    # Build fallback metadata for Cursor format (session info is in hook input, not transcript)
+    workspace_roots = hook_input.get("workspace_roots") or []
+    fallback_meta = {
+        "session_id": hook_input.get("session_id") or hook_input.get("conversation_id", ""),
+        "cwd": workspace_roots[0] if workspace_roots else "",
+    }
+
+    run(transcript_path, fallback_meta)
 
 
 if __name__ == "__main__":
