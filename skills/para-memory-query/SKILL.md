@@ -11,13 +11,13 @@ Query a three-layer memory system organized using the PARA method (Projects, Are
 
 All scripts are in `{base_dir}/scripts/` (where `{base_dir}` is shown in "Base directory for this skill:" at the top of this context).
 
-| Query type | Script |
+| Query type | Command |
 |---|---|
-| Semantic / unsure | `{base_dir}/scripts/search_qmd.sh "your query"` |
+| Semantic / unsure | `qmd query "your query"` |
 | Date or keyword in timeline | `{base_dir}/scripts/search_timeline.sh keyword "term"` |
 | Entity details (person/project/company) | `{base_dir}/scripts/query_entity.sh projects/name` |
 
-**If scripts fail or QMD is unavailable**, fall back to: Grep for content search → Glob for file patterns → direct file reading.
+**If QMD is unavailable**, fall back to: Grep for content search → Glob for file patterns → direct file reading.
 
 ---
 
@@ -32,10 +32,10 @@ Is this about...
 │  └─ → {base_dir}/scripts/search_timeline.sh date|range|keyword <args>
 │
 ├─ User preferences or working style?
-│  └─ → {base_dir}/scripts/search_qmd.sh "query" tacit
+│  └─ → qmd query "query" -c tacit
 │
 └─ Unsure or complex query?
-   └─ → {base_dir}/scripts/search_qmd.sh "query"
+   └─ → qmd query "query"
 ```
 
 ## Overview
@@ -101,17 +101,24 @@ For queries about what happened when:
 
 For complex or semantic queries where exact wording is unknown:
 
-**Search all collections**:
+**Search all collections** (auto-expand + rerank):
 ```bash
-{base_dir}/scripts/search_qmd.sh "pricing strategy discussion"
+qmd query "pricing strategy discussion"
+```
+
+**Structured query** (combine lex + vec for best recall):
+```bash
+qmd query $'lex: pricing strategy\nvec: discussion about product pricing decisions'
 ```
 
 **Search specific layer**:
-- Knowledge graph: `{base_dir}/scripts/search_qmd.sh "John's role" knowledge`
-- Daily notes: `{base_dir}/scripts/search_qmd.sh "started project" daily`
-- Tacit knowledge: `{base_dir}/scripts/search_qmd.sh "coding preferences" tacit`
+- Knowledge graph: `qmd query "John's role" -c knowledge`
+- Daily notes: `qmd query "started project" -c daily`
+- Tacit knowledge: `qmd query "coding preferences" -c tacit`
 
 **Note**: QMD must be installed and collections configured.
+
+For full qmd CLI syntax, query types, and collection filtering tips → see [qmd-cli.md](references/qmd-cli.md).
 
 ## Fallback: Built-in Tools
 
