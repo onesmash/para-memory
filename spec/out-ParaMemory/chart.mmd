@@ -1,0 +1,46 @@
+stateDiagram-v2
+  s0: lock=0 c1="no" c2="no" p1="read" p2="read" f1="active" f2="absent" f3="absent" f4="absent" ptr=0 sPC="idle"
+  s1: lock=1 c1="no" c2="no" p1="write" p2="read" f1="active" f2="absent" f3="absent" f4="absent" ptr=0 sPC="idle"
+  s2: lock=2 c1="no" c2="no" p1="read" p2="write" f1="active" f2="absent" f3="absent" f4="absent" ptr=0 sPC="idle"
+  s3: lock=3 c1="no" c2="no" p1="read" p2="read" f1="active" f2="absent" f3="absent" f4="absent" ptr=0 sPC="commit"
+  s4: lock=0 c1="no" c2="no" p1="read" p2="read" f1="superseded" f2="active" f3="absent" f4="absent" ptr=2 sPC="done"
+  s5: lock=0 c1="no" c2="yes" p1="read" p2="done" f1="active" f2="absent" f3="absent" f4="active" ptr=0 sPC="idle"
+  s6: lock=0 c1="yes" c2="no" p1="done" p2="read" f1="active" f2="absent" f3="active" f4="absent" ptr=0 sPC="idle"
+  s7: lock=1 c1="no" c2="no" p1="write" p2="read" f1="superseded" f2="active" f3="absent" f4="absent" ptr=2 sPC="done"
+  s8: lock=1 c1="no" c2="yes" p1="write" p2="done" f1="active" f2="absent" f3="absent" f4="active" ptr=0 sPC="idle"
+  s9: lock=2 c1="no" c2="no" p1="read" p2="write" f1="superseded" f2="active" f3="absent" f4="absent" ptr=2 sPC="done"
+  s10: lock=2 c1="yes" c2="no" p1="done" p2="write" f1="active" f2="absent" f3="active" f4="absent" ptr=0 sPC="idle"
+  s11: lock=3 c1="no" c2="yes" p1="read" p2="done" f1="active" f2="absent" f3="absent" f4="active" ptr=0 sPC="commit"
+  s12: lock=3 c1="yes" c2="no" p1="done" p2="read" f1="active" f2="absent" f3="active" f4="absent" ptr=0 sPC="commit"
+  s13: lock=0 c1="no" c2="yes" p1="read" p2="done" f1="superseded" f2="active" f3="absent" f4="active" ptr=2 sPC="done"
+  s14: lock=0 c1="yes" c2="no" p1="done" p2="read" f1="superseded" f2="active" f3="active" f4="absent" ptr=2 sPC="done"
+  s15: lock=0 c1="yes" c2="yes" p1="done" p2="done" f1="active" f2="absent" f3="active" f4="active" ptr=0 sPC="idle"
+  s16: lock=1 c1="no" c2="yes" p1="write" p2="done" f1="superseded" f2="active" f3="absent" f4="active" ptr=2 sPC="done"
+  s17: lock=2 c1="yes" c2="no" p1="done" p2="write" f1="superseded" f2="active" f3="active" f4="absent" ptr=2 sPC="done"
+  s18: lock=3 c1="yes" c2="yes" p1="done" p2="done" f1="active" f2="absent" f3="active" f4="active" ptr=0 sPC="commit"
+  s19: lock=0 c1="yes" c2="yes" p1="done" p2="done" f1="superseded" f2="active" f3="active" f4="active" ptr=2 sPC="done"
+  [*] --> s0
+  s0 --> s1: AddRead1
+  s0 --> s2: AddRead2
+  s0 --> s3: SupStart
+  s1 --> s6: AddCommit1
+  s2 --> s5: AddCommit2
+  s3 --> s4: SupCommit
+  s4 --> s7: AddRead1
+  s4 --> s9: AddRead2
+  s5 --> s8: AddRead1
+  s5 --> s11: SupStart
+  s6 --> s10: AddRead2
+  s6 --> s12: SupStart
+  s7 --> s14: AddCommit1
+  s8 --> s15: AddCommit1
+  s9 --> s13: AddCommit2
+  s10 --> s15: AddCommit2
+  s11 --> s13: SupCommit
+  s12 --> s14: SupCommit
+  s13 --> s16: AddRead1
+  s14 --> s17: AddRead2
+  s15 --> s18: SupStart
+  s16 --> s19: AddCommit1
+  s17 --> s19: AddCommit2
+  s18 --> s19: SupCommit

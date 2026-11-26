@@ -1,0 +1,20 @@
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: Breaks AtomicSupersede
+    lg1: Path to the AtomicSupersede bug
+  }
+  class lg0 breaks
+  class lg1 bugPath
+  s0: f1="active" f2="absent" ptr=0 sPC="idle"
+  s1: f1="active" f2="active" ptr=0 sPC="mark"
+  s2: f1="active" f2="active" ptr=0 sPC="crashed"
+  s3: f1="superseded" f2="active" ptr=2 sPC="done"
+  [*] --> s0
+  s0 --> s1: WriteNew
+  s1 --> s2: Crash
+  s1 --> s3: MarkOld
+  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
+  class s0 bugPath
+  class s1 breaks
+  class s1 bugPath
+  class s2 breaks

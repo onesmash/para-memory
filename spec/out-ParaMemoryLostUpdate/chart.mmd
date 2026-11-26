@@ -1,0 +1,44 @@
+stateDiagram-v2
+  state "Legend" as legend {
+    lg0: Breaks NoLostUpdate
+    lg1: Path to the NoLostUpdate bug
+  }
+  class lg0 breaks
+  class lg1 bugPath
+  s0: v3_2="absent" v4_1="absent" c1="no" c2="no" p1="read" p2="read" f3="absent" f4="absent"
+  s1: v3_2="absent" v4_1="absent" c1="no" c2="no" p1="read" p2="write" f3="absent" f4="absent"
+  s2: v3_2="absent" v4_1="absent" c1="no" c2="no" p1="write" p2="read" f3="absent" f4="absent"
+  s3: v3_2="absent" v4_1="absent" c1="no" c2="no" p1="write" p2="write" f3="absent" f4="absent"
+  s4: v3_2="absent" v4_1="absent" c1="no" c2="yes" p1="read" p2="done" f3="absent" f4="active"
+  s5: v3_2="absent" v4_1="absent" c1="yes" c2="no" p1="done" p2="read" f3="active" f4="absent"
+  s6: v3_2="absent" v4_1="absent" c1="no" c2="yes" p1="write" p2="done" f3="absent" f4="active"
+  s7: v3_2="absent" v4_1="absent" c1="yes" c2="no" p1="done" p2="write" f3="active" f4="absent"
+  s8: v3_2="absent" v4_1="active" c1="no" c2="yes" p1="write" p2="done" f3="absent" f4="active"
+  s9: v3_2="active" v4_1="absent" c1="yes" c2="no" p1="done" p2="write" f3="active" f4="absent"
+  s10: v3_2="absent" v4_1="absent" c1="yes" c2="yes" p1="done" p2="done" f3="absent" f4="active"
+  s11: v3_2="absent" v4_1="absent" c1="yes" c2="yes" p1="done" p2="done" f3="active" f4="absent"
+  s12: v3_2="absent" v4_1="active" c1="yes" c2="yes" p1="done" p2="done" f3="active" f4="active"
+  s13: v3_2="active" v4_1="absent" c1="yes" c2="yes" p1="done" p2="done" f3="active" f4="active"
+  [*] --> s0
+  s0 --> s1: Read2
+  s0 --> s2: Read1
+  s1 --> s3: Read1
+  s1 --> s4: Commit2
+  s2 --> s3: Read2
+  s2 --> s5: Commit1
+  s3 --> s6: Commit2
+  s3 --> s7: Commit1
+  s4 --> s8: Read1
+  s5 --> s9: Read2
+  s6 --> s11: Commit1
+  s7 --> s10: Commit2
+  s8 --> s12: Commit1
+  s9 --> s13: Commit2
+  classDef breaks fill:#ffecee,stroke:#e72e3b,stroke-width:2.5px,color:#cd2834
+  class s0 bugPath
+  class s2 bugPath
+  class s3 bugPath
+  class s7 bugPath
+  class s10 breaks
+  class s10 bugPath
+  class s11 breaks

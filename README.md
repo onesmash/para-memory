@@ -112,6 +112,16 @@ skills/
 
 Structural changes to the layout go through the OpenSpec process in `openspec/`.
 
+## Write-path invariants (formally checked)
+
+Three sentences, as required by the S5 close-out: what the property is, which command re-runs it, and how far it is covered.
+
+1. **Property.** One `--supersede` either commits *all* of its changes (new fact present, old fact `superseded`, `supersededBy` pointing at the new id) or none of them — a crash must never leave two `active` facts with no pointer. Two concurrent `--add` on the same entity must both survive, and fact ids must not collide.
+2. **Re-run.** `bash spec/run.sh` — works from a clean shell; exits `0` when both properties hold and both destruct variants go red, `1` on any mismatch, `2` when the toolchain is missing (never a silent pass).
+3. **Coverage.** `spec/` models the write path of `update_entity.py`; the counterexample-to-test bridge lives in `tests/test_write_path.py`. The sync commit is recorded in [`spec/PROPERTY-REGISTER.md`](spec/PROPERTY-REGISTER.md).
+
+`spec/ParaMemory.tla` is the target design (one lock per entity, one atomic commit per operation). `ParaMemoryLostUpdate.tla` reproduces the old unlocked snapshot-overwrite race; `ParaMemoryPartial.tla` reproduces the old two-write supersede with a crash window. Both go red for their own reason.
+
 ## Known limits
 
 - **Decay uses creation date, not access.** `lastAccessed` is written at creation and **not** updated by queries, so `hot`/`warm`/`cold` currently reflects *age*, not usage. Frequency-based decay is designed but not wired.
