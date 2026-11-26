@@ -39,7 +39,13 @@ case "$MODE" in
         # Search by keyword across all daily notes
         KEYWORD="$1"
         echo "Searching for keyword: $KEYWORD"
-        grep -r "$KEYWORD" "$DAILY_NOTES_DIR" --include="*.md" -n
+        # 零命中是「查完了，没有」，不是「坏掉了」：set -e 下裸 grep 会把 1 当脚本失败，
+        # 调用方分不清「没匹配」和「store 坏了」。这里显式返回 0 并说清楚。
+        if matches=$(grep -rn --include="*.md" -- "$KEYWORD" "$DAILY_NOTES_DIR"); then
+            echo "$matches"
+        else
+            echo "No matches found for: $KEYWORD"
+        fi
         ;;
     *)
         echo "Usage: $0 <mode> [args]"

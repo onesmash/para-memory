@@ -129,7 +129,10 @@ Three sentences, as required by the S5 close-out: what the property is, which co
 - **Semantic retrieval is a placeholder.** Without a configured backend there is no vector path at all; with one, it is untested at scale.
 - **No deletion API.** There is no way to physically remove a fact — supersession only. Any compliance requirement needing real erasure is not served today.
 - **Summaries are model-generated and unchecked.** `weekly_synthesis.py` can summarise a fact wrongly; nothing verifies it against `items.json`.
-- **`search_timeline.sh keyword` exits 1 on zero matches.** The script runs under `set -e`, so a `grep` with no hits terminates it with status 1 and no explanation. Treat exit 1 there as "no matches", not as a broken store.
+- **Query scripts can't tell "nothing found" from "broken" for every mode.** The keyword mode was fixed:
+  zero matches now prints `No matches found` and exits `0` (`tests/test_query_scripts.py` locks it).
+  `date`/`range` still exit `1` when the requested note doesn't exist — that is "you asked for a specific
+  date that isn't there", not an empty search.
 
 These are documented rather than planned, so you can judge whether the tool fits before reading the code.
 

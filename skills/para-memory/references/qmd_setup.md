@@ -4,18 +4,21 @@ QMD (https://github.com/onesmash/qmd) provides semantic search capabilities for 
 
 ## Installation
 
-Install QMD globally using Bun:
+QMD 跑在**官方 Node** 上（不再需要 bun）：源码直接由 Node 做类型剥离执行，没有构建步骤。
 
 ```bash
-bun install -g github:onesmash/qmd
+# 需要 Node >= 22.6（推荐 24 LTS）
+npm install -g github:onesmash/qmd#node-runtime
 ```
 
-Ensure `~/.bun/bin` is in your PATH.
+装完 `qmd --help` 能出用法即可；npm 的全局 bin 目录要在 `PATH` 里。
 
-For macOS, install Homebrew SQLite for extension support:
-```bash
-brew install sqlite
-```
+说明两点：
+
+- **分支**：`node-runtime` 是「云 API（SiliconFlow）+ 官方 Node」的那条线。仓库的 `main`
+  目前停在一个编译不过的上游合并体上，不要用 `main` 的源码装。
+- **SQLite**：数据库走 `better-sqlite3`（自带 FTS5，且允许加载扩展），
+  **不再需要 Homebrew SQLite** 那一步。
 
 ## Initial Configuration
 
@@ -207,8 +210,9 @@ qmd embed -f  # Force full re-embedding
 ## Troubleshooting
 
 **Command not found**
-- Ensure `~/.bun/bin` is in PATH
-- Reinstall: `bun install -g github:onesmash/qmd`
+- 确认 npm 全局 bin 在 PATH 里（`npm prefix -g` 下的 `bin`）
+- 确认 Node >= 22.6：`node --version`
+- 重装：`npm install -g github:onesmash/qmd#node-runtime`
 
 **Poor semantic search results**
 - Check API configuration: `~/.config/qmd/api.yml`
