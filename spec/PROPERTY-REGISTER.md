@@ -9,6 +9,28 @@
 | P1 | 一次 `--supersede` 要么同时落盘「新事实存在 + 旧事实 `superseded` + `supersededBy` 指向新 id」，要么文件停在操作前；崩溃不得留下两条 `active` 且无指针 | Chief | `skills/para-memory/scripts/update_entity.py`（`supersede_fact`、`write_items_atomic`） | 单机 POSIX 文件系统；只覆盖 `--supersede` 路径；不覆盖「用户手工编辑 `items.json`」 | L2 | 破坏变体 `spec/ParaMemoryPartial.tla`（把一次落盘拆成两次 + 崩溃）；真实回放 `tests/test_write_path.py` 的 `TestSupersedeIsAtomic`；`bash spec/run.sh` | 0 | 无日志面：半截状态事后不可观测（文件不记录「谁取代谁」的意图），只能靠崩溃注入复现 ⟹ 未达 L3 | 守住（单机 POSIX，仅 --supersede） | 037079081dff13eb169d2ef233d65e7bf7e9eace |  |
 | P2 | 同一实体的两个并发 `--add`，两条都必须留在最终 `items.json` 里，且 fact id 不重复 | Chief | `skills/para-memory/scripts/update_entity.py`（`add_fact`、`entity_lock`、`next_fact_id`） | 同一台机器上的多进程与多线程；POSIX `flock`；NFS 上的 `flock` 语义未验证；Windows 退化为「只有原子写、没有互斥」 | L2 | 破坏变体 `spec/ParaMemoryLostUpdate.tla`（去掉锁、写读到的快照）；真实回放 `tests/test_write_path.py` 的 `TestConcurrentAddLosesNothing`；`bash spec/run.sh` | 0 | 无日志面：丢失的写入不会留痕，只能靠并发注入复现 ⟹ 未达 L3 | 守住（同机多进程，POSIX flock） | 037079081dff13eb169d2ef233d65e7bf7e9eace |  |
 
+## 为什么是两条而不是一条（可分离性实测）
+
+P1 与 P2 都发生在写入路径上，很容易被当成「同一个失败家族」合并成一条更粗的性质。**不能合。**
+判据不是「像不像同一类」，而是「**能不能用破坏变体把两条分开**」。
+
+`spec/ParaMemorySeparability.tla` 把两种失败机制放进同一个模块，用 `FixAtomic` / `FixLock` 两个开关各自控制修法，
+然后 4 种组合 × 2 条不变量逐个跑（`bash spec/run-separability.sh`，退出码 0/1/2）：
+
+| FixAtomic | FixLock | AtomicSupersede | NoLostUpdate |
+|---|---|---|---|
+| TRUE | TRUE | 守住（rc 0） | 守住（rc 0） |
+| TRUE | FALSE | 守住（rc 0） | **违反（rc 12）** |
+| FALSE | TRUE | **违反（rc 12）** | 守住（rc 0） |
+| FALSE | FALSE | 违反（rc 12） | 违反（rc 12） |
+
+**关掉谁的修法，就只红谁的那一条** ⟹ 两个失败机制相互独立，合并会把「哪一处退化了」这个信息弄丢。
+
+第一次跑这个实验时，`FALSE/TRUE` 那一格的 `NoLostUpdate` 报的是 **rc=11 死锁**而不是 rc=0：
+破坏变体让崩溃把 `lock` 永久占住，并发那条路再也进不去。真实的 `flock` 随进程死亡由内核释放，
+所以这是**模型的错**，不是代码的发现——改成崩溃时释放锁之后才得到上表。
+教训：破坏变体也要建模「崩溃时资源被释放」，否则会造出一个看起来像发现的假信号。
+
 ## 空实现必须失败（已实测）
 
 把 `supersede_fact` / `add_fact` 分别替换成 `return None` 后重跑：
