@@ -6,16 +6,27 @@ Inspired by:
   https://github.com/affaan-m/everything-claude-code/blob/main/scripts/hooks/session-end.js
 
 Hook input (stdin): JSON with {"transcript_path": "..."}
-Output: ${PARA_MEMORY_ROOT:-~/para-memory}/memory/sessions/YYYY-MM-DD-<shortId>-session.md
+Output: ${PARA_MEMORY_ROOT:-~/para-memory}/memory/YYYY-MM-DD-<shortId>-session.md
+
+Two rules this file has to keep, because it runs unattended inside a host hook:
+
+1. **One session, one file, always fully re-rendered.** The transcript grows; the
+   file is rebuilt from it every time, never patched. Patching only the timestamp
+   is how a session silently keeps the first turn and loses the rest.
+2. **No environment assumptions.** It must run on the oldest Python the host may
+   have, and it must not depend on a `python` shim existing on PATH.
 """
+
+from __future__ import annotations
 
 import json
 import os
 import re
-import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
+
+from atomic_io import copy_file_atomic, write_text_atomic
 
 
 # ---------------------------------------------------------------------------
@@ -28,7 +39,9 @@ def get_sessions_dir() -> Path:
 
 
 def get_short_id(session_id: str) -> str:
-    return session_id[:8] if session_id else "unknown"
+    """A filename-safe prefix of the session id (also keeps globs literal)."""
+    safe = re.sub(r"[^A-Za-z0-9_-]", "-", (session_id or "")[:8]).strip("-")
+    return safe or "unknown"
 
 
 # ---------------------------------------------------------------------------
@@ -159,20 +172,70 @@ def build_conversation(messages: list[dict]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Session file management  (mirrors the JS reference)
+# Session file management
 # ---------------------------------------------------------------------------
+
+def read_header_value(content: str, key: str) -> str:
+    """Read one `**Key:** value` line out of an already captured session file."""
+    match = re.search(rf"^\*\*{re.escape(key)}:\*\* ?(.*)$", content, re.MULTILINE)
+    return match.group(1).strip() if match else ""
+
+
+def find_session_file(sessions_dir: Path, short_id: str, today: str) -> Path:
+    """The file this session already owns, or the name a brand-new one gets.
+
+    A session can still be running when the clock rolls past midnight. The first
+    capture names the file after the day it started, so later captures must land
+    in that same file — otherwise one conversation ends up split across two files
+    and the later one looks like it lost its opening turns.
+    """
+    default = sessions_dir / f"{today}-{short_id}-session.md"
+    if short_id == "unknown" or not sessions_dir.exists():
+        return default
+    existing = sorted(sessions_dir.glob(f"*-{short_id}-session.md"))
+    return existing[0] if existing else default
+
+
+def render_session_file(
+    *,
+    slug: str,
+    day: str,
+    project: str,
+    started: str,
+    updated: str,
+    tools_used: list[str],
+    files_modified: list[str],
+    messages: list[dict],
+) -> str:
+    """Render the whole file from the transcript; only the stamps are carried over."""
+    tools_line = ", ".join(tools_used) if tools_used else "—"
+    files_lines = (
+        "\n".join(f"- {f}" for f in files_modified) if files_modified else "—"
+    )
+    return (
+        f"# Session: {slug}\n"
+        f"**Date:** {day}\n"
+        f"**Project:** {project}\n"
+        f"**Started:** {started}\n"
+        f"**Last Updated:** {updated}\n\n"
+        f"**Tools:** {tools_line}\n\n"
+        f"**Files Modified:**\n{files_lines}\n\n"
+        f"---\n\n"
+        f"{build_conversation(messages)}"
+    )
+
 
 def run(transcript_path: str, fallback_meta: dict | None = None) -> None:
     p = Path(transcript_path)
 
+    sessions_dir = get_sessions_dir()
+    sessions_dir.mkdir(parents=True, exist_ok=True)
+    now = datetime.now()
+
     # .txt files: copy content directly
     if p.suffix.lower() == ".txt":
-        sessions_dir = get_sessions_dir()
-        today = datetime.now().strftime("%Y-%m-%d")
-        short_id = p.stem[:8]
-        session_file = sessions_dir / f"{today}-{short_id}-session.md"
-        sessions_dir.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(p, session_file)
+        session_file = sessions_dir / f"{now.strftime('%Y-%m-%d')}-{get_short_id(p.stem)}-session.md"
+        copy_file_atomic(p, session_file)
         print(f"[SessionEnd] Copied txt to session file: {session_file}", file=sys.stderr)
         return
 
@@ -183,45 +246,38 @@ def run(transcript_path: str, fallback_meta: dict | None = None) -> None:
     if sum(1 for m in messages if len(m["text"]) > 20) < 2:
         return
 
-    sessions_dir = get_sessions_dir()
-    today = datetime.now().strftime("%Y-%m-%d")
-    current_time = datetime.now().strftime("%H:%M")
+    today = now.strftime("%Y-%m-%d")
+    current_time = now.strftime("%H:%M")
     short_id = get_short_id(meta["session_id"])
-    session_file = sessions_dir / f"{today}-{short_id}-session.md"
+    session_file = find_session_file(sessions_dir, short_id, today)
     project = os.path.basename(meta["cwd"]) if meta["cwd"] else "unknown"
     slug = meta["slug"] or short_id
 
-    sessions_dir.mkdir(parents=True, exist_ok=True)
+    existed = session_file.exists()
+    day, started = today, current_time
+    if existed:
+        previous = session_file.read_text(encoding="utf-8")
+        day = read_header_value(previous, "Date") or today
+        started = read_header_value(previous, "Started") or current_time
 
-    if session_file.exists():
-        content = session_file.read_text(encoding="utf-8")
-        content = re.sub(
-            r"\*\*Last Updated:\*\*.*",
-            f"**Last Updated:** {current_time}",
-            content,
-        )
-        session_file.write_text(content, encoding="utf-8")
-        print(f"[SessionEnd] Updated session file: {session_file}", file=sys.stderr)
-    else:
-        tools_line = ", ".join(meta["tools_used"]) if meta["tools_used"] else "—"
-        files_lines = (
-            "\n".join(f"- {f}" for f in meta["files_modified"])
-            if meta["files_modified"]
-            else "—"
-        )
-        content = (
-            f"# Session: {slug}\n"
-            f"**Date:** {today}\n"
-            f"**Project:** {project}\n"
-            f"**Started:** {current_time}\n"
-            f"**Last Updated:** {current_time}\n\n"
-            f"**Tools:** {tools_line}\n\n"
-            f"**Files Modified:**\n{files_lines}\n\n"
-            f"---\n\n"
-            f"{build_conversation(messages)}"
-        )
-        session_file.write_text(content, encoding="utf-8")
-        print(f"[SessionEnd] Created session file: {session_file}", file=sys.stderr)
+    write_text_atomic(
+        session_file,
+        render_session_file(
+            slug=slug,
+            day=day,
+            project=project,
+            started=started,
+            updated=current_time,
+            tools_used=meta["tools_used"],
+            files_modified=meta["files_modified"],
+            messages=messages,
+        ),
+    )
+    verb = "Updated" if existed else "Created"
+    print(
+        f"[SessionEnd] {verb} session file: {session_file} ({len(messages)} messages)",
+        file=sys.stderr,
+    )
 
 
 # ---------------------------------------------------------------------------
