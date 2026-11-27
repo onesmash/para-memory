@@ -61,6 +61,42 @@ class TimelineSearchExitCodes(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("No notes found", result.stdout)
 
+    # --- C8：捕获写的是 `<date>-<shortid>-session.md`，date 模式必须认得出 ---
+    def write_note(self, name: str, body: str) -> None:
+        (self.root / "memory" / name).write_text(body, encoding="utf-8")
+
+    def test_date_mode_reads_capture_files_for_that_day(self) -> None:
+        self.write_note("2026-11-27-sess0001-session.md", "# Session: one\n\n第一条会话正文\n")
+        self.write_note("2026-11-27-sess0002-session.md", "# Session: two\n\n第二条会话正文\n")
+
+        result = self.run_search("date", "2026-11-27")
+
+        self.assertEqual(
+            result.returncode,
+            0,
+            f"按日期查不到当天的会话文件（捕获写的是 <date>-<id>-session.md）：{result.stdout}",
+        )
+        for needle in ("第一条会话正文", "第二条会话正文", "sess0001", "sess0002"):
+            self.assertIn(needle, result.stdout, f"漏了 {needle}：{result.stdout}")
+
+    def test_date_mode_still_reads_a_legacy_plain_date_file(self) -> None:
+        result = self.run_search("date", "2026-11-01")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("hello world", result.stdout)
+
+    def test_date_mode_does_not_leak_other_days(self) -> None:
+        self.write_note("2026-11-28-sess0009-session.md", "别的一天的正文\n")
+        result = self.run_search("date", "2026-11-27")
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertNotIn("别的一天的正文", result.stdout)
+
+    def test_range_mode_places_session_files_by_their_day(self) -> None:
+        self.write_note("2026-11-15-sess0003-session.md", "月中那次会话\n")
+        result = self.run_search("range", "2026-11-10", "2026-11-20")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("月中那次会话", result.stdout)
+        self.assertNotIn("2026-11-27", result.stdout)
+
     def test_unknown_mode_is_a_usage_error(self) -> None:
         result = self.run_search("nonsense")
         self.assertEqual(result.returncode, 1)

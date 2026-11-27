@@ -1,43 +1,66 @@
 #!/bin/bash
-# Search daily notes by date range or keyword
+# Search the captured notes by date, date range, or keyword.
+#
+# Notes land in memory/ in two shapes:
+#   <date>.md                       a hand-written daily note
+#   <date>-<shortid>-session.md     one captured session (save_chat_history.py)
+#
+# So "the notes of a day" is a prefix match on the filename, not a filename
+# match. Looking for `<date>.md` verbatim finds nothing as soon as the capture
+# hook is the thing writing the notes.
 
 set -e
 
 MEMORY_ROOT="${PARA_MEMORY_ROOT:-$HOME/para-memory}"
-DAILY_NOTES_DIR="$MEMORY_ROOT/memory"  # Assuming memory/ is sibling to knowledge/
+DAILY_NOTES_DIR="$MEMORY_ROOT/memory"
 
-MODE="$1"
-shift
+usage() {
+    echo "Usage: $0 <mode> [args]"
+    echo "Modes:"
+    echo "  date <YYYY-MM-DD>              - Show every note captured for that day"
+    echo "  range <start-date> <end-date>  - Show notes in date range"
+    echo "  keyword <term>                 - Search for keyword across all notes"
+    exit 1
+}
+
+MODE="${1:-}"
+shift || true
 
 case "$MODE" in
     date)
-        # Search by specific date
-        DATE="$1"
-        FILE="$DAILY_NOTES_DIR/$DATE.md"
-        if [ -f "$FILE" ]; then
-            cat "$FILE"
-        else
+        DATE="${1:-}"
+        [ -n "$DATE" ] || usage
+        shopt -s nullglob
+        files=("$DAILY_NOTES_DIR/$DATE"*.md)
+        if [ "${#files[@]}" -eq 0 ]; then
             echo "No notes found for date: $DATE"
             exit 1
         fi
+        for file in "${files[@]}"; do
+            echo "=== $(basename "$file" .md) ==="
+            cat "$file"
+            echo ""
+        done
         ;;
     range)
-        # Search by date range
-        START_DATE="$1"
-        END_DATE="$2"
+        START_DATE="${1:-}"
+        END_DATE="${2:-}"
+        [ -n "$START_DATE" ] && [ -n "$END_DATE" ] || usage
         echo "Searching notes from $START_DATE to $END_DATE..."
+        shopt -s nullglob
         for file in "$DAILY_NOTES_DIR"/*.md; do
-            filename=$(basename "$file" .md)
-            if [[ ("$filename" > "$START_DATE" || "$filename" = "$START_DATE") && ("$filename" < "$END_DATE" || "$filename" = "$END_DATE") ]]; then
-                echo "=== $filename ==="
+            name=$(basename "$file" .md)
+            day="${name:0:10}"
+            if [[ ("$day" > "$START_DATE" || "$day" = "$START_DATE") && ("$day" < "$END_DATE" || "$day" = "$END_DATE") ]]; then
+                echo "=== $name ==="
                 cat "$file"
                 echo ""
             fi
         done
         ;;
     keyword)
-        # Search by keyword across all daily notes
-        KEYWORD="$1"
+        KEYWORD="${1:-}"
+        [ -n "$KEYWORD" ] || usage
         echo "Searching for keyword: $KEYWORD"
         # 零命中是「查完了，没有」，不是「坏掉了」：set -e 下裸 grep 会把 1 当脚本失败，
         # 调用方分不清「没匹配」和「store 坏了」。这里显式返回 0 并说清楚。
@@ -48,11 +71,6 @@ case "$MODE" in
         fi
         ;;
     *)
-        echo "Usage: $0 <mode> [args]"
-        echo "Modes:"
-        echo "  date <YYYY-MM-DD>              - Show notes for specific date"
-        echo "  range <start-date> <end-date>  - Show notes in date range"
-        echo "  keyword <term>                 - Search for keyword across all notes"
-        exit 1
+        usage
         ;;
 esac
