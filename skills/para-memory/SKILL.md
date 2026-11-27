@@ -101,7 +101,7 @@ python3 {base_dir}/scripts/weekly_synthesis.py ${PARA_MEMORY_ROOT:-~/para-memory
 
 ### 5. Register SessionEnd Hook
 
-Automatically saves each conversation as a markdown file at `${PARA_MEMORY_ROOT:-~/para-memory}/memory/<date>-<shortid>-session.md` when a Claude Code session ends. Every trigger re-renders the whole file from the transcript (one session = one file, even across midnight), so a long session never keeps only its first turn.
+Automatically saves each conversation as a markdown file at `${PARA_MEMORY_ROOT:-~/para-memory}/memory/<date>-<shortid>-session.md` when a Claude Code session ends. Every trigger re-renders the whole file from the transcript, so a long session never keeps only its first turn. Which file belongs to which session is decided by the `**Session:** <full id>` line inside the file, not by the filename: the name is only an 8-character prefix, and two different ids can share it.
 
 Run the installer to copy scripts to `~/.claude/hooks/para-memory/` and register the hook:
 

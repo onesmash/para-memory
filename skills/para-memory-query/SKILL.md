@@ -98,6 +98,18 @@ captured sessions come back together:
 {base_dir}/scripts/search_timeline.sh keyword "authentication feature"
 ```
 
+**Exit codes** — the three must stay distinguishable, otherwise "the store is broken" reads as
+"there is nothing for that day":
+
+| code | meaning |
+|---|---|
+| 0 | answered (keyword: zero matches is still an answer) |
+| 1 | bad request: missing/invalid argument, unknown mode, or no note for that exact date |
+| 2 | the store itself: `$PARA_MEMORY_ROOT/memory` missing or unreadable |
+
+On macOS, `grep -r` on a missing directory returns 1 (GNU grep returns 2), so the directory check
+runs before `grep` — do not delete it thinking the exit code already covers it.
+
 ## Semantic Search with QMD
 
 For complex or semantic queries where exact wording is unknown:

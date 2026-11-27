@@ -15,7 +15,7 @@ para-memory keeps **atomic facts** instead: one claim per entry, each with an id
 | Layer | What it holds | Where |
 |---|---|---|
 | **Knowledge graph** | Entities (projects / areas / resources / archives), each with `summary.md` (quick context) and `items.json` (atomic facts) | `entities/*/` |
-| **Daily notes** | Chronological conversation timeline — the raw source facts are extracted from | `memory/` (`<date>.md` or `<date>-<shortid>-session.md`) |
+| **Daily notes** | Chronological conversation timeline — the raw source facts are extracted from | `memory/` (`<date>.md` or `<date>-<shortid>-session.md`, each carrying its full session id in the header) |
 | **Tacit knowledge** | One file of preferences and working style, updated as patterns emerge | `tacit/` |
 
 Facts are grouped into **hot** (touched in 7 days), **warm** (30 days), **cold** (beyond). Decay is a *summary filter*: cold facts are omitted from `summary.md` so a quick context load stays small — but they remain in `items.json` and are still retrievable.
@@ -121,9 +121,15 @@ Three sentences, as required by the S5 close-out: what the property is, which co
 3. **Coverage.** `spec/` models the write path of `update_entity.py`; the counterexample-to-test bridge lives in `tests/test_write_path.py`. The sync commit is recorded in [`spec/PROPERTY-REGISTER.md`](spec/PROPERTY-REGISTER.md).
 
 The capture, query and synthesis paths are guarded by ordinary unit tests instead of invariants:
-`python3 -m unittest discover -s tests` runs the whole guard suite (32 tests), and
-`python3 tests/destruct_variants.py` re-breaks each fixed defect one at a time and requires the
-matching test to go red — a green suite that no change can turn red proves nothing.
+`python3 -m unittest discover -s tests` runs the whole guard suite (56 tests), and
+`python3 tests/destruct_variants.py` re-breaks each fixed defect one at a time (in a throwaway
+`git worktree`, never in your checkout) and requires the matching test to go red — a green suite
+that no change can turn red proves nothing. Exit codes are part of the contract:
+`search_timeline.sh` returns 0 for an answer (including "no match"), 1 for a bad request, 2 when
+the store itself is missing — "the folder was moved" must not look like "nothing happened that
+day". `weekly_synthesis.py` returns 0 only when the index was refreshed, and prints
+`[weekly_synthesis] index=updated|skipped|failed` on stderr so a caller can tell an explicit
+`--skip-qmd` from a real run.
 
 `spec/ParaMemory.tla` is the target design (one lock per entity, one atomic commit per operation). `ParaMemoryLostUpdate.tla` reproduces the old unlocked snapshot-overwrite race; `ParaMemoryPartial.tla` reproduces the old two-write supersede with a crash window. Both go red for their own reason.
 

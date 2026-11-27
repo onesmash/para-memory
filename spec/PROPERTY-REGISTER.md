@@ -86,8 +86,34 @@ P1 与 P2 都发生在写入路径上，很容易被当成「同一个失败家�
 | C7 summary.md 非原子 | `write_text` 覆写，写一半崩即半截文件 | `…::test_crash_during_summary_write_keeps_the_previous_version` | 退回 `write_text` |
 | C8 date 模式断链 | `search_timeline.sh date 2026-11-27` → rc=1（捕获写的是 `<date>-<id>-session.md`） | `tests/test_query_scripts.py::test_date_mode_reads_capture_files_for_that_day` | 退回 `files=("$DIR/$DATE.md")` |
 
-一条命令重跑全部破坏变体：`python3 tests/destruct_variants.py`（8/8 各自按名字红）。它的意义是：
+一条命令重跑全部破坏变体：`python3 tests/destruct_variants.py`（18/18 各自按名字红；跑在
+`git worktree` 临时副本里，不碰工作区）。它的意义是：
 全绿本身不证明这些测试有分辨力，必须看到每处修法退回旧写法时**对应的**那条测试报红。
 
 qmd CLI 的三条实测约束（`-c` 对 `update` 无效、`embed` 只认第一个 `-c`、`--timeout` 到点截断却
 仍 rc=0）记在 `skills/para-memory/references/qmd_setup.md` 的「During weekly synthesis」。
+
+## 第二轮：GLM-5.3 复审后的补修（同一批路径）
+
+复审在 33 条测试全绿、18 条破坏变体自证的前提下又找出 1 条 P1 与若干 P2。它们都不是
+「测试写错了」，而是「修法只覆盖了我想到的那条路」。记在这里，避免下一轮把同样的话再说一遍。
+
+| 缺陷 | 症状（实测） | 守门测试 | 破坏变体 |
+|---|---|---|---|
+| P1 会话归属按文件名前缀 | `ab-12345…` 与 `ab.12345…` 净化后同前缀；后到的会话把先到的整份文件重渲染掉，无告警 | `test_capture_path.py::test_two_sessions_sharing_a_filename_prefix_keep_separate_files` | 退回按文件名认领 |
+| P2 txt 分支自成规则 | `.txt` 自己拼日期，跨天又开一个文件，与 JSONL 路径不一致 | `…::test_txt_capture_follows_the_same_file_rule` | 退回自己拼日期 |
+| P2 原子写改权限 | `mkstemp` 0600 → rename 后 `settings.json` 0644 变 0600 | `test_atomic_io.py::test_an_existing_file_keeps_its_mode` | 去掉 chmod |
+| P2 坏 items.json 炸全轮 | 一个半写 JSON 让其后实体全无 summary，报裸 traceback | `test_synthesis.py::test_one_broken_items_json_does_not_stop_the_other_entities` | except 换成 `ZeroDivisionError` |
+| P2 旧 summary 复活 | 无 `## Hot Facts` 的旧文件被整份当 overview 保留，陈旧内容每轮回来 | `…::test_a_summary_without_markers_is_rebuilt_not_carried_over` | 退回 `split("## Hot Facts")` |
+| P2 keyword 把坏 store 报成零命中 | store 被移走 → `No matches found`、rc=0 | `test_query_scripts.py::test_keyword_against_a_missing_store_is_not_reported_as_no_match` | 去掉 `require_store` |
+| P2 短日期/元字符 | `date 2026-11-2` 漏到 20 号；`date '*'` 匹配全部 | `…::test_date_mode_rejects_a_partial_date`、`…::test_date_mode_rejects_glob_metacharacters` | 去掉格式校验 |
+| P2 跳过与完成同为 rc=0 | 调用方靠 stdout 猜索引状态 | `test_synthesis.py::test_index_status_is_machine_readable`（`index=updated/skipped/failed` 走 stderr） | — |
+| P2 临时解释器静默失效 | venv 删掉后 hook 停摆 | `test_install_hooks.py::test_a_throwaway_interpreter_is_flagged` | — |
+| P3 变体脚本有 kill 窗口 | 原地打补丁被 kill -9 → 仓库留在被破坏状态 | 变体改跑 `git worktree` 临时副本 | — |
+| P3 bash 3.2 吞字节 | `$DATE（` → stderr 少一个字节，Python 侧 UnicodeDecodeError | `test_shell_hygiene.py::test_variables_are_braced_before_multibyte_text` | 退回 `$DATE（` |
+
+两条与平台有关、写进代码注释的实测事实：
+
+- **BSD grep（macOS）对不存在的目录返回 1**，和「零命中」一样；GNU grep 才返回 2。所以
+  `search_timeline.sh` 的 `require_store` 是主守卫，`case "$rc"` 只是 Linux 侧的保险。
+- **bash 3.2 的 `$VAR` 紧贴多字节字符会吞字节**，且不报错 —— 只能靠 `${VAR}` 与机器扫描。
