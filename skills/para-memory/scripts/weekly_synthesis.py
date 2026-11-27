@@ -92,6 +92,31 @@ def get_base_path(provided_path=None):
     return Path(os.path.expanduser('~/para-memory/knowledge'))
 
 
+def extract_overview(content):
+    """The hand-written `# Title` + `## Overview` part of an existing summary.
+
+    Returns "" when the file does not have that shape. The previous code split the
+    file on "## Hot Facts" and kept *everything* before it, so any summary written
+    by an older version (or by hand) came back in full on every run and its stale
+    lines became permanent.
+    """
+    title = ""
+    lines = content.lstrip().splitlines()
+    if lines and lines[0].startswith("# "):
+        title = lines[0].strip()
+
+    match = re.search(
+        r"^## Overview[ \t]*$\n(.*?)(?=^## |\Z)",
+        content,
+        re.MULTILINE | re.DOTALL,
+    )
+    if not match or not match.group(1).strip():
+        return ""
+
+    header = f"{title}\n\n" if title else ""
+    return f"{header}## Overview\n\n{match.group(1).strip()}"
+
+
 def regenerate_summary(entity_path):
     """Regenerate summary.md from items.json with memory decay."""
     items_path = entity_path / "items.json"
@@ -121,14 +146,10 @@ def regenerate_summary(entity_path):
     hot_facts.sort(key=lambda f: f.get("accessCount", 0), reverse=True)
     warm_facts.sort(key=lambda f: f.get("accessCount", 0), reverse=True)
 
-    # Read existing summary to preserve overview
+    # Keep only the hand-written overview; everything below it is generated.
     overview = ""
     if summary_path.exists():
-        content = summary_path.read_text()
-        if "## Overview" in content:
-            parts = content.split("## Hot Facts", 1)
-            if len(parts) > 0:
-                overview = parts[0].strip()
+        overview = extract_overview(summary_path.read_text(encoding="utf-8"))
 
     # Generate new summary
     entity_name = entity_path.name.replace("-", " ").title()
@@ -294,9 +315,18 @@ def main(argv=None):
     entity_paths = [items_file.parent for items_file in base_path.rglob("items.json")]
 
     total_hot = total_warm = total_cold = 0
+    failures = []
 
     for entity_path in entity_paths:
-        hot, warm, cold = regenerate_summary(entity_path)
+        try:
+            hot, warm, cold = regenerate_summary(entity_path)
+        except (OSError, ValueError, KeyError, TypeError) as exc:
+            # One hand-edited or half-written items.json used to abort the whole
+            # run: every entity after it got no summary at all, and the failure
+            # surfaced as a bare traceback instead of a named one.
+            failures.append(f"{entity_path.name}: {exc}")
+            print(f"  ✗ {entity_path.name}: 跳过（{exc}）")
+            continue
         total_hot += hot
         total_warm += warm
         total_cold += cold
@@ -305,19 +335,28 @@ def main(argv=None):
     print(f"\n  Total: {total_hot} hot, {total_warm} warm, {total_cold} cold facts")
     print(f"  Processed {len(entity_paths)} entities")
 
+    index_ok = True
     if skip_qmd:
         print("\n⚠ Skipped QMD update (--skip-qmd flag)：索引未更新")
-        return 0
+        print("[weekly_synthesis] index=skipped", file=sys.stderr)
+    else:
+        index_ok, reason = update_qmd_index()
+        if index_ok:
+            print("\n✓ Synthesis complete")
+            print("[weekly_synthesis] index=updated", file=sys.stderr)
+        else:
+            print("\n✗ Summary files regenerated, but 索引未更新：")
+            print(f"  {reason}")
+            print("  搜索到的仍是旧索引。修好 qmd 后重跑，或加 --skip-qmd 明确跳过。")
+            print("[weekly_synthesis] index=failed", file=sys.stderr)
 
-    ok, reason = update_qmd_index()
-    if ok:
-        print("\n✓ Synthesis complete")
-        return 0
-
-    print("\n✗ Summary files regenerated, but 索引未更新：")
-    print(f"  {reason}")
-    print("  搜索到的仍是旧索引。修好 qmd 后重跑，或加 --skip-qmd 明确跳过。")
-    return 1
+    if failures:
+        # 退出码非 0（有实体没写成功），同时把名单点名，别只留一行 traceback。
+        print(f"\n✗ {len(failures)} 个实体没有写出 summary：")
+        for line in failures:
+            print(f"  - {line}")
+        return 1
+    return 0 if index_ok else 1
 
 
 if __name__ == "__main__":

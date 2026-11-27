@@ -246,6 +246,66 @@ class SynthesisTest(unittest.TestCase):
         self.assertEqual(self.calls(), [], f"--skip-qmd 还是调用了 qmd：{self.calls()}")
         self.assertIn("Skipped QMD update", result.stdout)
 
+    # -- 一个坏实体 / 旧格式 summary / 索引状态 --------------------------
+    def test_one_broken_items_json_does_not_stop_the_other_entities(self):
+        broken = self.knowledge / "people" / "broken"
+        broken.mkdir(parents=True)
+        # 半写的 JSON：手编或崩溃时最常见的样子
+        (broken / "items.json").write_text(
+            '{"entity": "people/broken", "items": [', encoding="utf-8"
+        )
+
+        result = self.run_synthesis()
+
+        self.assertNotEqual(
+            result.returncode, 0, f"有实体写不出来却报成功：{result.stdout}"
+        )
+        self.assertIn("broken", result.stdout, "坏实体没有被点名")
+        self.assertIn("个实体没有写出 summary", result.stdout)
+        self.assertTrue(
+            (self.entity / "summary.md").exists(),
+            "一个坏 items.json 让好实体也没了 summary",
+        )
+
+    def test_a_summary_without_markers_is_rebuilt_not_carried_over(self):
+        summary = self.entity / "summary.md"
+        summary.write_text(
+            "OLD LEGACY LINE：这一行属于旧格式，必须被清掉\n", encoding="utf-8"
+        )
+
+        weekly_synthesis.regenerate_summary(self.entity)
+
+        text = summary.read_text(encoding="utf-8")
+        self.assertNotIn(
+            "OLD LEGACY LINE", text, "旧格式 summary 被整份当成 overview 保留了下来"
+        )
+        self.assertIn("## Hot Facts", text)
+
+    def test_a_hand_written_overview_survives_regeneration(self):
+        summary = self.entity / "summary.md"
+        summary.write_text(
+            "# Alice\n\n## Overview\n\n负责支付链路。\n\n## Hot Facts\n\n- 旧条目\n",
+            encoding="utf-8",
+        )
+
+        weekly_synthesis.regenerate_summary(self.entity)
+
+        text = summary.read_text(encoding="utf-8")
+        self.assertIn("负责支付链路。", text, "手写的 Overview 被冲掉了")
+        self.assertNotIn("旧条目", text, "旧的热点条目没被重建")
+
+    def test_index_status_is_machine_readable(self):
+        """rc 只有 0/1；调用方要区分「跳过」「已更新」「失败」得有一个 stderr 标记。"""
+        self.assertIn("index=updated", self.run_synthesis().stderr)
+
+        skipped = self.run_synthesis("--skip-qmd")
+        self.assertEqual(skipped.returncode, 0, skipped.stderr)
+        self.assertIn("index=skipped", skipped.stderr)
+
+        self.make_qmd(embed_rc=2)
+        failed = self.run_synthesis()
+        self.assertIn("index=failed", failed.stderr)
+
     # -- C7: summary.md 原子写 -------------------------------------------
     def test_summary_lists_hot_facts_and_hides_cold_ones(self):
         hot, warm, cold = weekly_synthesis.regenerate_summary(self.entity)
