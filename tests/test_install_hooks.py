@@ -142,6 +142,38 @@ class InstallHooksTest(unittest.TestCase):
         for event, entries in settings["hooks"].items():
             self.assertEqual(len(entries), 1, f"{event} 重复注册了：{entries}")
 
+    def test_a_throwaway_interpreter_is_flagged(self):
+        """venv/临时目录里的解释器会在目录删掉后静默停摆：安装时要喊出来。"""
+        venv = "/Users/xuhui/tmp/.venv/bin/python3"
+        self.assertIn(
+            "虚拟环境",
+            install_hooks.interpreter_risk(venv, "/Users/xuhui/tmp/.venv", "/usr"),
+        )
+        self.assertIn(
+            "临时目录",
+            install_hooks.interpreter_risk("/var/folders/xx/T/py/bin/python3", "/a", "/a"),
+        )
+        self.assertEqual(
+            install_hooks.interpreter_risk("/usr/bin/python3", "/usr", "/usr"), ""
+        )
+
+    def test_python_flag_overrides_the_interpreter(self):
+        install_hooks.copy_scripts(dest=self.hooks_dest)
+        install_hooks.register_hook(
+            settings_file=self.settings,
+            hooks_dest=self.hooks_dest,
+            interpreter="/usr/bin/python3",
+        )
+        command = dict(self.commands())["SessionEnd"]
+        self.assertEqual(shlex.split(command)[0], "/usr/bin/python3")
+
+    def test_registering_before_copying_the_script_fails_loudly(self):
+        with self.assertRaises(SystemExit) as caught:
+            install_hooks.register_hook(
+                settings_file=self.settings, hooks_dest=self.hooks_dest
+            )
+        self.assertIn("不存在", str(caught.exception))
+
     def test_settings_write_is_atomic(self):
         original = self.settings.read_text(encoding="utf-8")
         with mock.patch.object(
