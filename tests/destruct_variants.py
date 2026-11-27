@@ -57,8 +57,8 @@ VARIANTS = [
         "id": "P1",
         "why": "会话归属退回「按文件名前缀」——前缀相同的两个会话互相覆盖",
         "file": CAPTURE,
-        "old": '                if read_header_value(read_head(path), "Session") == session_id:',
-        "new": "                if True:",
+        "old": "            if file_owner(path) == session_id:",
+        "new": "            if True:",
         "test": "tests.test_capture_path.CapturePathTest.test_two_sessions_sharing_a_filename_prefix_keep_separate_files",
         "expect": "两个不同会话被并成一个文件",
     },
@@ -68,7 +68,11 @@ VARIANTS = [
         "file": CAPTURE,
         "old": (
             "        session_file = find_session_file(\n"
-            '            sessions_dir, "", get_short_id(p.stem), now.strftime("%Y-%m-%d")\n'
+            "            sessions_dir,\n"
+            '            "",\n'
+            "            get_short_id(p.stem),\n"
+            '            now.strftime("%Y-%m-%d"),\n'
+            "            no_id_key=str(p.resolve()),\n"
             "        )\n"
         ),
         "new": (
@@ -143,7 +147,7 @@ VARIANTS = [
         "old": 'QMD_INSTALL_HINT = "npm install -g @tobilu/qmd"',
         "new": 'QMD_INSTALL_HINT = "bun install -g github:tobi/qmd"',
         "test": "tests.test_synthesis.SynthesisTest.test_missing_qmd_points_at_the_upstream_package",
-        "expect": "安装提示还在用 bun",
+        "expect": "没给出上游安装命令",
     },
     {
         "id": "C7",

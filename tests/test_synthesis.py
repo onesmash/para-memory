@@ -236,7 +236,11 @@ class SynthesisTest(unittest.TestCase):
             PATH="/usr/bin:/bin",
         )
         self.assertNotEqual(result.returncode, 0, f"qmd 不在却报成功：{result.stdout}")
-        self.assertIn("npm install -g @tobilu/qmd", result.stdout)
+        self.assertIn(
+            "npm install -g @tobilu/qmd",
+            result.stdout,
+            "缺 qmd 时没给出上游安装命令（npm install -g @tobilu/qmd）",
+        )
         self.assertNotIn(
             "bun install", result.stdout, "缺 qmd 时的安装提示还在用 bun（今天只走上游 npm 包）"
         )
