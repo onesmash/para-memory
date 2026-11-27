@@ -92,29 +92,51 @@ def get_base_path(provided_path=None):
     return Path(os.path.expanduser('~/para-memory/knowledge'))
 
 
+GENERATED_HEADINGS = (
+    "## Hot Facts",
+    "## Warm Facts",
+    "## Archived Facts",
+    "## Related Entities",
+)
+
+
+def _unfenced_scan(content):
+    """Yield `(line, in_fence)` so callers can ignore text inside code fences."""
+    in_fence = False
+    for line in content.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(("```", "~~~")):
+            in_fence = not in_fence
+            yield line, True
+            continue
+        yield line, in_fence
+
+
 def extract_overview(content):
-    """The hand-written `# Title` + `## Overview` part of an existing summary.
+    """The hand-written head of an existing summary, or "" when there is none.
 
-    Returns "" when the file does not have that shape. The previous code split the
-    file on "## Hot Facts" and kept *everything* before it, so any summary written
-    by an older version (or by hand) came back in full on every run and its stale
-    lines became permanent.
+    Everything above the first section *this script writes* is kept verbatim, so a
+    hand-written `## My Notes` and a `## ` line inside a fenced code block both
+    survive. A file without a real `## Overview` heading (an older version, or
+    plain junk) returns "" and gets rebuilt — the previous version split on
+    "## Hot Facts" and kept everything before it, which resurrected such files in
+    full on every run.
     """
-    title = ""
-    lines = content.lstrip().splitlines()
-    if lines and lines[0].startswith("# "):
-        title = lines[0].strip()
+    prefix_lines = []
+    for line, in_fence in _unfenced_scan(content):
+        if not in_fence and line.strip() in GENERATED_HEADINGS:
+            break
+        prefix_lines.append(line)
 
-    match = re.search(
-        r"^## Overview[ \t]*$\n(.*?)(?=^## |\Z)",
-        content,
-        re.MULTILINE | re.DOTALL,
-    )
-    if not match or not match.group(1).strip():
+    prefix = "\n".join(prefix_lines).strip()
+    if not prefix:
         return ""
-
-    header = f"{title}\n\n" if title else ""
-    return f"{header}## Overview\n\n{match.group(1).strip()}"
+    if not any(
+        not in_fence and line.strip() == "## Overview"
+        for line, in_fence in _unfenced_scan(prefix)
+    ):
+        return ""
+    return prefix
 
 
 def regenerate_summary(entity_path):

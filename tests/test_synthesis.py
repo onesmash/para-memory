@@ -237,7 +237,9 @@ class SynthesisTest(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0, f"qmd 不在却报成功：{result.stdout}")
         self.assertIn("npm install -g @tobilu/qmd", result.stdout)
-        self.assertNotIn("bun install", result.stdout)
+        self.assertNotIn(
+            "bun install", result.stdout, "缺 qmd 时的安装提示还在用 bun（今天只走上游 npm 包）"
+        )
         self.assertIn("索引未更新", result.stdout)
 
     def test_skip_qmd_is_an_explicit_degradation(self):
@@ -293,6 +295,25 @@ class SynthesisTest(unittest.TestCase):
         text = summary.read_text(encoding="utf-8")
         self.assertIn("负责支付链路。", text, "手写的 Overview 被冲掉了")
         self.assertNotIn("旧条目", text, "旧的热点条目没被重建")
+
+    def test_a_code_fence_inside_the_overview_survives(self):
+        """Overview 里的围栏代码块含 `## ` 行时，不许把截取点切进围栏中间。"""
+        summary = self.entity / "summary.md"
+        summary.write_text(
+            "# Alice\n\n## Overview\n\n说明：\n\n```md\n## 这一行在围栏里，不是小节\n"
+            "kept?\n```\n\n## My Notes\n\n手写备注也要保住。\n\n## Hot Facts\n\n- 旧条目\n",
+            encoding="utf-8",
+        )
+
+        weekly_synthesis.regenerate_summary(self.entity)
+
+        text = summary.read_text(encoding="utf-8")
+        self.assertIn(
+            "## 这一行在围栏里，不是小节", text, "围栏里的 ## 行被当成了小节边界"
+        )
+        self.assertIn("kept?", text, "围栏后半被静默丢弃")
+        self.assertIn("手写备注也要保住。", text, "手写小节被生成器吞掉了")
+        self.assertNotIn("旧条目", text)
 
     def test_index_status_is_machine_readable(self):
         """rc 只有 0/1；调用方要区分「跳过」「已更新」「失败」得有一个 stderr 标记。"""
