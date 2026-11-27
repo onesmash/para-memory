@@ -181,12 +181,27 @@ qmd update
 ```
 
 ### During weekly synthesis
-Update index and rebuild embeddings:
+
+`weekly_synthesis.py` 自己会做，不需要手敲。它做的事和为什么这样做：
 
 ```bash
-qmd update
-qmd embed
+qmd update                                  # ① 刷新文件索引
+qmd embed -c knowledge --timeout 0           # ② 每个记忆集合各一次
+qmd embed -c daily     --timeout 0
 ```
+
+三条实测约束（2026-11-27，qmd 2.9.0）：
+
+1. **`qmd update` 没有集合过滤。** `qmd update -c x` 会静默忽略 `-c` 并刷新全部集合，所以这一步
+   只能全局跑。它是文件索引的哈希扫描（不是向量化），代价可控；真正贵的那一半在 ②。
+2. **`qmd embed` 只认第一个 `-c`，并且会校验集合名**（不存在时 `Collection not found: X`，rc=1）。
+   所以按集合逐个调用，别想一次 `-c a -c b`。
+3. **`qmd embed --timeout` 到点是「截断但成功」**：实测 `--timeout 0.05` 在 13 秒时停下，仍打印
+   `✓ Done! Embedded 12 chunks` 且 rc=0。所以脚本默认传 `--timeout 0`（不限时），把退出码当唯一
+   信号；如果你自己设了上限，请知道它可能只嵌了一半而 rc 仍是 0。
+
+索引没更新成功时，`weekly_synthesis.py` 退出码非 0 并打印 `索引未更新`（可用 `--skip-qmd` 显式跳过）。
+集合名不一样的话用 `QMD_COLLECTIONS="a b"` 覆盖，qmd 可执行文件不在 PATH 上时用 `QMD_BIN=/path/to/qmd`。
 
 ### During conversation
 Search before loading into context:
@@ -203,13 +218,12 @@ qmd query "customer feedback" -c knowledge
 **After adding/updating entities:**
 ```bash
 qmd update
-qmd embed 
+qmd embed -c knowledge    # 一次一个集合，见上面「During weekly synthesis」
 ```
 
 **Weekly synthesis:**
 ```bash
-qmd update  # Update index
-qmd embed   # Rebuild embeddings
+python3 skills/para-memory/scripts/weekly_synthesis.py   # 自己会 update + 逐集合 embed
 ```
 
 **When search quality degrades:**

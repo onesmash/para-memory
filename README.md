@@ -15,7 +15,7 @@ para-memory keeps **atomic facts** instead: one claim per entry, each with an id
 | Layer | What it holds | Where |
 |---|---|---|
 | **Knowledge graph** | Entities (projects / areas / resources / archives), each with `summary.md` (quick context) and `items.json` (atomic facts) | `entities/*/` |
-| **Daily notes** | Chronological conversation timeline — the raw source facts are extracted from | `timeline/` |
+| **Daily notes** | Chronological conversation timeline — the raw source facts are extracted from | `memory/` (`<date>.md` or `<date>-<shortid>-session.md`) |
 | **Tacit knowledge** | One file of preferences and working style, updated as patterns emerge | `tacit/` |
 
 Facts are grouped into **hot** (touched in 7 days), **warm** (30 days), **cold** (beyond). Decay is a *summary filter*: cold facts are omitted from `summary.md` so a quick context load stays small — but they remain in `items.json` and are still retrievable.
@@ -45,22 +45,22 @@ Facts are grouped into **hot** (touched in 7 days), **warm** (30 days), **cold**
 export PARA_MEMORY_ROOT=~/para-memory   # where the store lives
 
 # 1. initialise the store
-python skills/para-memory/scripts/init_memory_system.py "$PARA_MEMORY_ROOT"
+python3 skills/para-memory/scripts/init_memory_system.py "$PARA_MEMORY_ROOT"
 
 # 2. create an entity — category first, then name
 #    categories map to sub-paths: projects → projects/,
 #    people → areas/people/, companies → areas/companies/, resources → resources/
-python skills/para-memory/scripts/create_entity.py companies acme
+python3 skills/para-memory/scripts/create_entity.py companies acme
 #    → $PARA_MEMORY_ROOT/knowledge/areas/companies/acme/
 
 # 3. add a fact — the fact itself is JSON; `source` is required
-python skills/para-memory/scripts/update_entity.py \
+python3 skills/para-memory/scripts/update_entity.py \
   "$PARA_MEMORY_ROOT/knowledge/areas/companies/acme" \
   --add '{"fact": "Signed the Series A in June 2025", "category": "milestone", "timestamp": "2025-06-01", "source": "2025-06-01"}'
 #    → ✓ Added fact: acme-001
 
 # 4. supersede an old fact — old id, then the replacement as JSON
-python skills/para-memory/scripts/update_entity.py \
+python3 skills/para-memory/scripts/update_entity.py \
   "$PARA_MEMORY_ROOT/knowledge/areas/companies/acme" \
   --supersede acme-001 '{"fact": "Series A closed at $12M, not $8M", "category": "milestone", "timestamp": "2025-06-14", "source": "2025-06-14"}'
 #    → ✓ Added fact: acme-002
@@ -90,7 +90,7 @@ skills/
       init_memory_system.py
       create_entity.py
       update_entity.py      # adds facts, supersedes facts
-      save_chat_history.py  # writes conversation turns to the timeline
+      save_chat_history.py  # captures a session to memory/<date>-<id>-session.md
       weekly_synthesis.py   # regenerates summary.md by tier
       install_hooks.py      # hooks that capture conversations automatically
   para-memory-query/    # read side
@@ -106,7 +106,7 @@ skills/
 
 **Decay filters summaries, not storage.** A cold fact is hidden from quick context, never dropped from the store. Retrieval by `query_entity.sh` still reaches it.
 
-**Hooks capture automatically; the agent also writes explicitly.** `install_hooks.py` registers session-end hooks so conversations land in the timeline without the agent remembering to call anything. Facts still need an explicit `--add` — extraction is a judgement call, and a wrong fact that arrived silently is worse than a missing one.
+**Hooks capture automatically; the agent also writes explicitly.** `install_hooks.py` registers session-end hooks so conversations land in `memory/` without the agent remembering to call anything. Re-running the hook re-renders the whole file from the transcript, so a long session never keeps only its first turn. Facts still need an explicit `--add` — extraction is a judgement call, and a wrong fact that arrived silently is worse than a missing one.
 
 **Optional semantic search, off by default.** `qmd_setup.md` describes wiring an external embedding backend. Without it, queries are keyword/grep over local files. If you configure one, note that index and query text leave the machine.
 
@@ -120,6 +120,11 @@ Three sentences, as required by the S5 close-out: what the property is, which co
 2. **Re-run.** `bash spec/run.sh` — works from a clean shell; exits `0` when both properties hold and both destruct variants go red, `1` on any mismatch, `2` when the toolchain is missing (never a silent pass).
 3. **Coverage.** `spec/` models the write path of `update_entity.py`; the counterexample-to-test bridge lives in `tests/test_write_path.py`. The sync commit is recorded in [`spec/PROPERTY-REGISTER.md`](spec/PROPERTY-REGISTER.md).
 
+The capture, query and synthesis paths are guarded by ordinary unit tests instead of invariants:
+`python3 -m unittest discover -s tests` runs the whole guard suite (32 tests), and
+`python3 tests/destruct_variants.py` re-breaks each fixed defect one at a time and requires the
+matching test to go red — a green suite that no change can turn red proves nothing.
+
 `spec/ParaMemory.tla` is the target design (one lock per entity, one atomic commit per operation). `ParaMemoryLostUpdate.tla` reproduces the old unlocked snapshot-overwrite race; `ParaMemoryPartial.tla` reproduces the old two-write supersede with a crash window. Both go red for their own reason.
 
 ## Known limits
@@ -131,8 +136,9 @@ Three sentences, as required by the S5 close-out: what the property is, which co
 - **Summaries are model-generated and unchecked.** `weekly_synthesis.py` can summarise a fact wrongly; nothing verifies it against `items.json`.
 - **Query scripts can't tell "nothing found" from "broken" for every mode.** The keyword mode was fixed:
   zero matches now prints `No matches found` and exits `0` (`tests/test_query_scripts.py` locks it).
-  `date`/`range` still exit `1` when the requested note doesn't exist — that is "you asked for a specific
-  date that isn't there", not an empty search.
+  `date` matches every note whose filename starts with that day (`<date>.md` and every
+  `<date>-<id>-session.md`), so a captured session is reachable by its date; `date`/`range` still exit `1`
+  when the day genuinely has no note — that is "you asked for a date that isn't there", not an empty search.
 
 These are documented rather than planned, so you can judge whether the tool fits before reading the code.
 

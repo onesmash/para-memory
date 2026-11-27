@@ -47,7 +47,7 @@ export PARA_MEMORY_ROOT=/path/to/my/memory
 ### 1. Initialize System
 
 ```bash
-python {base_dir}/scripts/init_memory_system.py ${PARA_MEMORY_ROOT:-~/para-memory}
+python3 {base_dir}/scripts/init_memory_system.py ${PARA_MEMORY_ROOT:-~/para-memory}
 ```
 
 Creates:
@@ -59,20 +59,20 @@ Creates:
 
 ```bash
 # Create a person entity
-python {base_dir}/scripts/create_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge people "John Doe"
+python3 {base_dir}/scripts/create_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge people "John Doe"
 
 # Create a company entity
-python {base_dir}/scripts/create_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge companies "Acme Corp"
+python3 {base_dir}/scripts/create_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge companies "Acme Corp"
 
 # Create a project entity
-python {base_dir}/scripts/create_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge projects "Product Launch"
+python3 {base_dir}/scripts/create_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge projects "Product Launch"
 ```
 
 ### 3. Add Facts to Entity
 
 ```bash
 # Add a fact
-python {base_dir}/scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/john-doe \
+python3 {base_dir}/scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/john-doe \
   --add '{
     "fact": "Joined Acme Corp as CTO in March 2025",
     "category": "milestone",
@@ -82,7 +82,7 @@ python {base_dir}/scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/kn
   }'
 
 # Supersede old fact with new one
-python {base_dir}/scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/john-doe \
+python3 {base_dir}/scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/john-doe \
   --supersede john-doe-001 '{
     "fact": "Promoted to VP Engineering at Acme Corp",
     "category": "milestone",
@@ -96,20 +96,20 @@ python {base_dir}/scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/kn
 
 ```bash
 # Apply memory decay, regenerate summaries, and update search index
-python {base_dir}/scripts/weekly_synthesis.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge
+python3 {base_dir}/scripts/weekly_synthesis.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge
 ```
 
 ### 5. Register SessionEnd Hook
 
-Automatically saves each conversation as a markdown file in `${PARA_MEMORY_ROOT:-~/para-memory}/memory/sessions/` when a Claude Code session ends.
+Automatically saves each conversation as a markdown file at `${PARA_MEMORY_ROOT:-~/para-memory}/memory/<date>-<shortid>-session.md` when a Claude Code session ends. Every trigger re-renders the whole file from the transcript (one session = one file, even across midnight), so a long session never keeps only its first turn.
 
 Run the installer to copy scripts to `~/.claude/hooks/para-memory/` and register the hook:
 
 ```bash
-python {base_dir}/scripts/install_hooks.py
+python3 {base_dir}/scripts/install_hooks.py
 ```
 
-This copies `save_chat_history.py` to `~/.claude/hooks/para-memory/` and updates `~/.claude/settings.json` to point to it, decoupling the hook from the repo location.
+This copies `save_chat_history.py` plus the `atomic_io.py` it imports to `~/.claude/hooks/para-memory/`, and updates `~/.claude/settings.json` to point at them, decoupling the hook from the repo location. Two details are deliberate: the command uses the **absolute** interpreter (`sys.executable`) because a hook's PATH is not your shell's and stock macOS has no `python`; and `settings.json` is written through a temp file + rename so a crash cannot truncate your host configuration.
 
 ## Working with Entities
 
@@ -200,7 +200,7 @@ Identify facts worth preserving by category:
 For each identified fact, use `update_entity.py`:
 
 ```bash
-python {base_dir}/scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/john \
+python3 {base_dir}/scripts/update_entity.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge/areas/people/john \
   --add '{
     "fact": "Leading new API project starting Q1 2026",
     "category": "status",
@@ -263,7 +263,7 @@ If conversation reveals new user patterns, update `MEMORY.md`:
 **Weekly (Automated):**
 ```bash
 # Run synthesis (automatically updates QMD index and embeddings)
-python {base_dir}/scripts/weekly_synthesis.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge
+python3 {base_dir}/scripts/weekly_synthesis.py ${PARA_MEMORY_ROOT:-~/para-memory}/knowledge
 ```
 
 This applies memory decay, regenerates summaries, and updates search index.
@@ -336,9 +336,14 @@ qmd collection add ${PARA_MEMORY_ROOT:-~/para-memory} --name tacit --mask "MEMOR
 ### Index and embed
 
 ```bash
-qmd update
-qmd embed
+qmd update                       # 刷新文件索引（没有集合过滤，会扫全部集合）
+qmd embed -c knowledge           # 向量化：一次只认一个集合，-c 必须写
+qmd embed -c daily
 ```
+
+`weekly_synthesis.py` 会自动做这两步：`update` 一次，然后对 `QMD_COLLECTIONS`（默认
+`knowledge daily`）里的每个集合各跑一次 `embed -c <name> --timeout 0`。索引没更新成功时它
+退出码非 0，不会打印「完成」。
 
 ## Resources
 

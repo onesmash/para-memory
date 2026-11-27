@@ -43,7 +43,7 @@ Is this about...
 Three distinct memory layers:
 
 1. **Knowledge Graph** - Entities (people, projects, companies) organized in PARA directories with summary.md and items.json files
-2. **Daily Notes** - Chronological timeline of events in dated markdown files (YYYY-MM-DD.md)
+2. **Daily Notes** - Chronological timeline of events in `memory/`. Two filename shapes: a hand-written `YYYY-MM-DD.md`, and one captured session per file, `YYYY-MM-DD-<shortid>-session.md`
 3. **Tacit Knowledge** - User patterns, preferences, and working style
 
 ### Environment Configuration (Optional)
@@ -82,7 +82,8 @@ For queries about people, projects, or companies:
 
 For queries about what happened when:
 
-**Specific date**:
+**Specific date** — matches every note whose filename starts with that day, so all of that day's
+captured sessions come back together:
 ```bash
 {base_dir}/scripts/search_timeline.sh date 2026-01-15
 ```

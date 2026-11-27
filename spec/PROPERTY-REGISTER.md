@@ -66,3 +66,28 @@ P1 与 P2 都发生在写入路径上，很容易被当成「同一个失败家�
 3. **终态用关检查代替了 Done 动作**——`toolchain.md` 硬约束 #3 要求加 `Done == pc \in {...} /\ UNCHANGED vars`；本轮改用 `CHECK_DEADLOCK FALSE` 把死锁检查整个关掉。`toolchain.md` 同时写着「`-deadlock` 的语义是『不要』检查死锁」，这条读反了。
 
 补齐代价：每份模型加 3 行 `Done`，重跑一次 `bash spec/run.sh`，再把状态数连同 `-workers` 一起记。未做，因为本轮的任务是审计这次运行本身。
+
+## 范围边界：这张表只覆盖 `items.json` 的写入路径
+
+上面两条性质的覆盖范围是 `update_entity.py` 的 `--supersede` 与并发 `--add`，都落在
+`items.json` 这一份文件上。**捕获、查询、合成三条链路不在本表范围内**，它们失效时不会留下
+「半截状态」这种东西，看到的就是错的结果本身，所以按普通测试守（证据等级 L1），不按不变量守（L2）。
+不把 L1 的绿写进本表，是为了不让「有登记表」被读成「这些路径都被模型检查过」。
+
+2026-11-27 第二轮修复（C1/C4/C5/C6/C7/C8 + hook 解释器）的守门测试：
+
+| 缺陷 | 症状（实测） | 守门测试 | 破坏变体（必须红） |
+|---|---|---|---|
+| C1 捕获只存第一轮 | 二次触发后文件仍 16 行、新消息 grep=0，日志却写 Updated | `tests/test_capture_path.py::test_second_capture_drops_nothing_from_the_first` | 退回「只改时间戳」 |
+| C2 3.9 上 import 就崩 | `python3.9 save_chat_history.py` → `TypeError: unsupported operand type(s) for \|` | `…::test_hook_runs_under_the_oldest_python_available`（本机 `/usr/bin/python3` = 3.9.6） | 去掉 `from __future__ import annotations` |
+| C3 注册命令是裸 `python` | 本机无 `python`，hook 静默不执行 | `tests/test_install_hooks.py::test_registered_command_actually_captures_a_session` | 退回 `python <script>` |
+| C4 embed 不限集合 / 被 600 s 掐死 | `qmd embed` 不带 `-c` 会向量化用户全部集合；2 s/chunk 下 600 s 只够 ~301 chunk | `tests/test_synthesis.py::test_every_embed_call_is_scoped_to_one_collection`、`…::test_embed_carries_no_wall_clock_cap_by_default` | 去掉 `-c` / 去掉 `--timeout 0` |
+| C5 索引失败仍报完成 | 去掉 qmd 的 PATH → rc=0 且打印 `✓ Synthesis complete!` | `…::test_failed_index_refresh_exits_nonzero`、`…::test_failed_embedding_exits_nonzero`、`…::test_missing_qmd_points_at_the_upstream_package` | 退回 `return 0` |
+| C7 summary.md 非原子 | `write_text` 覆写，写一半崩即半截文件 | `…::test_crash_during_summary_write_keeps_the_previous_version` | 退回 `write_text` |
+| C8 date 模式断链 | `search_timeline.sh date 2026-11-27` → rc=1（捕获写的是 `<date>-<id>-session.md`） | `tests/test_query_scripts.py::test_date_mode_reads_capture_files_for_that_day` | 退回 `files=("$DIR/$DATE.md")` |
+
+一条命令重跑全部破坏变体：`python3 tests/destruct_variants.py`（8/8 各自按名字红）。它的意义是：
+全绿本身不证明这些测试有分辨力，必须看到每处修法退回旧写法时**对应的**那条测试报红。
+
+qmd CLI 的三条实测约束（`-c` 对 `update` 无效、`embed` 只认第一个 `-c`、`--timeout` 到点截断却
+仍 rc=0）记在 `skills/para-memory/references/qmd_setup.md` 的「During weekly synthesis」。
