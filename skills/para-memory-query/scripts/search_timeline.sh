@@ -99,8 +99,10 @@ case "$MODE" in
         [ -n "$KEYWORD" ] || usage
         require_store
         echo "Searching for keyword: $KEYWORD"
-        # 零命中是「查完了，没有」，不是「坏掉了」；但目录不存在 / 读不了（grep rc>=2）
-        # 必须与零命中分开报，否则「store 坏了」会被伪装成「没有匹配」。
+        # 零命中是「查完了，没有」，不是「坏掉了」。但 store 坏了必须与零命中分开报。
+        # 注意平台差异（实测）：BSD grep（macOS）对不存在的目录**静默返回 1**，和「零命中」
+        # 一模一样；GNU grep 才返回 2。所以上面的 require_store 是主守卫，下面的 rc 分支
+        # 只是 Linux 侧的保险 —— 不要因为「rc 已经处理了」就把目录检查删掉。
         rc=0
         matches=$(grep -rn --include="*.md" -- "$KEYWORD" "$DAILY_NOTES_DIR") || rc=$?
         case "$rc" in

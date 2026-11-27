@@ -83,7 +83,7 @@ VARIANTS = [
         "why": "去掉 __future__ annotations —— 3.9 上 import 期就 TypeError",
         "note": "需要本机存在 <3.10 的解释器才有分辨力（本机 /usr/bin/python3 = 3.9.6）",
         "file": CAPTURE,
-        "old": "from __future__ import annotations\n\nimport json",
+        "old": "from __future__ import annotations\n\nimport hashlib",
         "new": "import json",
         "test": "tests.test_capture_path.CapturePathTest.test_hook_runs_under_the_oldest_python_available",
         "expect": "跑不起来",
@@ -214,7 +214,7 @@ VARIANTS = [
         "old": '        require_store\n        echo "Searching for keyword: $KEYWORD"',
         "new": '        echo "Searching for keyword: $KEYWORD"',
         "test": "tests.test_query_scripts.TimelineSearchExitCodes.test_keyword_against_a_missing_store_is_not_reported_as_no_match",
-        "expect": "Memory store not found",
+        "expect": "No matches found for: hello",
     },
     {
         "id": "P3-bash32",
