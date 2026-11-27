@@ -106,7 +106,12 @@ class TimelineSearchExitCodes(unittest.TestCase):
             text=True,
             env=env,
         )
-        self.assertEqual(result.returncode, 2, f"rc={result.returncode}：{result.stdout}{result.stderr}")
+        self.assertEqual(
+            result.returncode,
+            2,
+            f"目录不存在时必须 exit 2（否则 store 坏了会被报成没有匹配）；"
+            f"rc={result.returncode}：{result.stdout}{result.stderr}",
+        )
         self.assertNotIn("No matches found", result.stdout)
         self.assertIn("Memory store not found", result.stderr)
 

@@ -143,7 +143,7 @@ VARIANTS = [
         "old": 'QMD_INSTALL_HINT = "npm install -g @tobilu/qmd"',
         "new": 'QMD_INSTALL_HINT = "bun install -g github:tobi/qmd"',
         "test": "tests.test_synthesis.SynthesisTest.test_missing_qmd_points_at_the_upstream_package",
-        "expect": "bun install -g github:tobi/qmd",
+        "expect": "安装提示还在用 bun",
     },
     {
         "id": "C7",
@@ -214,7 +214,66 @@ VARIANTS = [
         "old": '        require_store\n        echo "Searching for keyword: $KEYWORD"',
         "new": '        echo "Searching for keyword: $KEYWORD"',
         "test": "tests.test_query_scripts.TimelineSearchExitCodes.test_keyword_against_a_missing_store_is_not_reported_as_no_match",
-        "expect": "No matches found for: hello",
+        "expect": "目录不存在时必须 exit 2",
+    },
+    {
+        "id": "P1-txt-owner",
+        "why": "无 id 的 txt 退回 `candidates[0]` —— 整份覆写别人的会话文件",
+        "file": CAPTURE,
+        "old": (
+            "    for path in candidates:\n"
+            "        if not file_owner(path):\n"
+            "            return path\n"
+            "    if file_owner(default):\n"
+            "        return _disambiguated(default, no_id_key or short_id)\n"
+            "    return default\n"
+        ),
+        "new": "    return candidates[0]\n",
+        "test": "tests.test_capture_path.CapturePathTest.test_txt_capture_never_overwrites_a_file_that_belongs_to_a_session",
+        "expect": "无 id 的 txt 捕获把另一个会话的文件整份覆盖了",
+    },
+    {
+        "id": "P2-overview-fence",
+        "why": "overview 退回正则截到第一个 `## ` —— 围栏里的行和手写小节被吞",
+        "file": SYNTHESIS,
+        "old": (
+            "    prefix_lines = []\n"
+            "    for line, in_fence in _unfenced_scan(content):\n"
+            "        if not in_fence and line.strip() in GENERATED_HEADINGS:\n"
+            "            break\n"
+            "        prefix_lines.append(line)\n"
+            "\n"
+            '    prefix = "\\n".join(prefix_lines).strip()\n'
+        ),
+        "new": (
+            "    import re as _re\n"
+            '    _m = _re.search(r"^## Overview[ \\t]*$\\n(.*?)(?=^## |\\Z)", content,'
+            " _re.MULTILINE | _re.DOTALL)\n"
+            '    prefix = f"## Overview\\n\\n{_m.group(1).strip()}" if _m else ""\n'
+        ),
+        "test": "tests.test_synthesis.SynthesisTest.test_a_code_fence_inside_the_overview_survives",
+        "expect": "围栏里的 ## 行被当成了小节边界",
+    },
+    {
+        "id": "P3-read-window",
+        "why": "身份行读取退回按字节截 4096 —— 长 slug 把 `**Session:**` 挤出窗口",
+        "file": CAPTURE,
+        "old": (
+            "    lines = []\n"
+            '    with path.open("r", encoding="utf-8", errors="replace") as handle:\n'
+            "        for _ in range(max_lines):\n"
+            "            line = handle.readline(65536)\n"
+            "            if not line:\n"
+            "                break\n"
+            "            lines.append(line)\n"
+            '    return "".join(lines)\n'
+        ),
+        "new": (
+            '    with path.open("r", encoding="utf-8", errors="replace") as handle:\n'
+            "        return handle.read(4096)\n"
+        ),
+        "test": "tests.test_capture_path.CapturePathTest.test_a_very_long_slug_does_not_hide_the_identity_line",
+        "expect": "超长 slug 把身份行挤出了读取窗口",
     },
     {
         "id": "P3-bash32",
