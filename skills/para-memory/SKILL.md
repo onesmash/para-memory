@@ -321,7 +321,8 @@ QMD provides local search (BM25 keyword, vector semantic, hybrid with reranking)
 See references/qmd_setup.md for full installation and configuration.
 
 ```bash
-bun install -g https://github.com/onesmash/qmd
+# 上游官方 Node 版；不需要 bun，也不需要任何 API key（模型是本地 GGUF）
+npm install -g @tobilu/qmd@2.9.0
 ```
 
 ### Add collections (one-time)

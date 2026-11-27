@@ -1,54 +1,44 @@
 # QMD Setup Guide
 
-QMD (https://github.com/onesmash/qmd) provides semantic search capabilities for the memory system.
+QMD (https://github.com/tobi/qmd) provides semantic search capabilities for the memory system.
+**只用上游版本**：不再维护 fork，也没有任何云端 API 依赖。
 
 ## Installation
 
-QMD 跑在**官方 Node** 上（不再需要 bun）：源码直接由 Node 做类型剥离执行，没有构建步骤。
+上游 2.9.0 本身就是官方 Node 实现（`better-sqlite3` 自带 FTS5），**不需要 bun、没有构建步骤**：
 
 ```bash
-# 需要 Node >= 22.6（推荐 24 LTS）
-npm install -g github:onesmash/qmd#cloud-api-2.9
+# 需要 Node >= 22
+npm install -g @tobilu/qmd@2.9.0
 ```
 
-装完 `qmd --help` 能出用法即可；npm 的全局 bin 目录要在 `PATH` 里。
+装完 `qmd --version` 应输出 `qmd 2.9.0 (<commit>)`；npm 的全局 bin 目录要在 `PATH` 里。
 
-说明三点：
+说明两点：
 
-- **分支**：`main` 现在就是上游 `tobi/qmd`（2.9.0，本身就是官方 Node + `better-sqlite3`）。
-  我们这侧只多了**云 API** 那一条线，放在 `cloud-api-2.9` 分支上：远程 embedding 上游
-  已有（`http(s)://base#model`），我们补的是**通用的远程 rerank**（`/rerank`），
-  因为上游原来只认 TypeSafe 一家。
-- **SQLite**：数据库走 `better-sqlite3`（自带 FTS5，且允许加载扩展），
-  **不再需要 Homebrew SQLite** 那一步。
-- 旧的 `node-runtime` 分支已作废（它做的是 Bun→Node 迁移，上游自己已经做完了）。
+- **没有 API key**。embed / rerank / query-expansion 三条都是本地 GGUF，首次用到时自动下到
+  `~/.cache/qmd/models/`（合计约 **2.13 GB**）：`embeddinggemma-300M-Q8_0.gguf` 318 MB、
+  `qwen3-reranker-0.6b-q8_0.gguf` 610 MB、`qmd-query-expansion-1.7B-q4_k_m.gguf` 1.2 GB。
+- **下载慢就加镜像**：`HF_ENDPOINT=https://hf-mirror.com qmd embed`。
 
 ## Initial Configuration
 
-模型写在全局配置 `~/.config/qmd/index.yml` 的 `models:` 段里。远程端点用
-`http(s)://API-base#模型ID` 的写法，**凭据只写环境变量名，不写值**：
+`~/.config/qmd/index.yml` 只写 collections，**不要写 `models:` 段**——留空即用内置默认模型。
+（上游不读 `api.yml`；本机此前那份 SiliconFlow 配置已移出配置目录。）
 
-```yaml
-models:
-  embed: https://api.siliconflow.cn/v1#Qwen/Qwen3-Embedding-0.6B
-  embedOptions:
-    dimensions: 1024          # 必须与模型输出维度一致
-    apiKeyEnv: SILICONFLOW_API_KEY
-  rerank: https://api.siliconflow.cn/v1#Qwen/Qwen3-Reranker-0.6B
-  rerankOptions:
-    apiKeyEnv: SILICONFLOW_API_KEY
-  # 本地 query-expansion 模型（远程 generate 目前不支持，留默认或填本地 GGUF）
-  generate: hf:tobil/qmd-query-expansion-1.7B-gguf/qmd-query-expansion-1.7B-q4_k_m.gguf
+## 本机实测（Intel Mac，无 GPU，2026-11-27）
+
+```
+qmd embed -c code    100 chunks / 33 docs → 3m19s（≈2 s/chunk）
+qmd vsearch ...      正常出结果
+qmd query ...        单次 ≈1m8s（含模型加载）
 ```
 
-然后把 key 放进环境（不要写进配置文件）：
+`qmd` 会提示 `no GPU acceleration, running on CPU (slow)`，属正常。**按 2 s/chunk 估算**：
+五千个文件（约 1.6 万 chunk）全量重建约 **8–9 小时**，建议一次跑完。
 
-```bash
-export SILICONFLOW_API_KEY=...     # 放进 shell profile，或由密钥管理注入
-```
-
-换 embedding 模型会让已有向量失效（向量空间由「端点+模型+维度+revision」共同决定），
-旧索引需要重跑一次 `qmd embed`。`qmd status` 会显示还有多少待嵌入。
+换 embedding 模型会让已有向量失效（向量空间由「模型+维度+revision」共同决定），必须
+`qmd embed -f` 重建；`qmd status` 会显示还有多少待嵌入。
 
 ## Setting Up Collections
 
