@@ -7,18 +7,47 @@ Sorts facts into tiers:
 - Warm (accessed 8-30 days ago)
 - Cold (not accessed 30+ days) - omitted from summary
 
-After regenerating summaries, updates QMD search index and embeddings.
+After regenerating summaries, refreshes the QMD index for the memory
+collections. If that refresh fails, the run exits non-zero: a summary that says
+"done" while the index still serves yesterday's content is worse than a loud
+failure.
 
-Usage: python weekly_synthesis.py [base_path] [--skip-qmd]
+Usage: python3 weekly_synthesis.py [base_path] [--skip-qmd]
 If base_path is not provided, uses PARA_MEMORY_ROOT environment variable.
 If environment variable not set, defaults to ~/para-memory/knowledge.
+
+Environment:
+  QMD_BIN                    qmd executable (default: PATH, then common bin dirs)
+  QMD_COLLECTIONS            collections to embed (default: "knowledge daily")
+  QMD_EMBED_TIMEOUT_MINUTES  cap handed to `qmd embed`; 0 = no limit (default)
+
+Why there is no wall-clock kill around qmd: a kill in the middle of an embed
+leaves partial vectors on disk and cannot be told apart from a clean run. qmd
+owns that decision through `--timeout`, and its own default (30 min) truncates
+the run while still printing "✓ Done!" with exit code 0 — measured with
+`--timeout 0.05`, which stopped at 13s and reported success. So the default
+here is explicitly 0 (no limit) and the exit code is what we trust.
 """
 
-import sys
-import subprocess
-from pathlib import Path
 import json
+import os
+import re
+import shutil
+import subprocess
+import sys
 from datetime import datetime
+from pathlib import Path
+
+from atomic_io import write_text_atomic
+
+QMD_INSTALL_HINT = "npm install -g @tobilu/qmd"
+DEFAULT_COLLECTIONS = ("knowledge", "daily")
+QMD_FALLBACK_PATHS = (
+    "/usr/local/bin/qmd",
+    "/opt/homebrew/bin/qmd",
+    "~/local/bin/qmd",
+    "~/.local/bin/qmd",
+)
 
 
 def days_since_access(last_accessed):
@@ -52,16 +81,13 @@ def classify_fact(fact):
 
 def get_base_path(provided_path=None):
     """Get base path from argument, environment variable, or default."""
-    import os
-    from pathlib import Path
-    
     if provided_path:
         return Path(os.path.expanduser(provided_path))
-    
+
     env_path = os.environ.get('PARA_MEMORY_ROOT')
     if env_path:
         return Path(os.path.expanduser(env_path))
-    
+
     # Default path
     return Path(os.path.expanduser('~/para-memory/knowledge'))
 
@@ -136,86 +162,136 @@ def regenerate_summary(entity_path):
         for entity in sorted(all_related):
             summary_content += f"- {entity}\n"
 
-    summary_path.write_text(summary_content)
+    # Atomic: a crash must leave the previous summary, not half of the new one.
+    write_text_atomic(summary_path, summary_content)
     return len(hot_facts), len(warm_facts), len(cold_facts)
 
 
+# ---------------------------------------------------------------------------
+# QMD index maintenance
+# ---------------------------------------------------------------------------
+
+def resolve_qmd():
+    """Absolute path to the qmd binary, or None.
+
+    PATH is not enough: an agent host often runs without the npm global bin
+    directory on PATH (that is how the very first weekly synthesis "skipped"
+    the index on this machine while qmd was installed all along).
+    """
+    explicit = os.environ.get("QMD_BIN", "").strip()
+    if explicit:
+        return explicit if Path(explicit).is_file() and os.access(explicit, os.X_OK) else None
+
+    found = shutil.which("qmd")
+    if found:
+        return found
+
+    for candidate in QMD_FALLBACK_PATHS:
+        path = Path(os.path.expanduser(candidate))
+        if path.is_file() and os.access(path, os.X_OK):
+            return str(path)
+    return None
+
+
+def memory_collections():
+    """Collections that belong to memory; never the user's other indexes."""
+    raw = os.environ.get("QMD_COLLECTIONS", "")
+    named = [part for part in re.split(r"[,\s]+", raw.strip()) if part]
+    return named or list(DEFAULT_COLLECTIONS)
+
+
+def embed_timeout_minutes():
+    """Value for qmd's own `--timeout`; 0 = no limit. qmd validates it."""
+    return os.environ.get("QMD_EMBED_TIMEOUT_MINUTES", "").strip() or "0"
+
+
+def _run_qmd(binary, args):
+    """Run one qmd command. Returns (ok, detail).
+
+    qmd is a Node CLI whose launcher starts with `#!/usr/bin/env node`, so
+    resolving the qmd path is not enough: `node` has to be findable too. It
+    usually sits in the same bin directory, and a hook environment often has
+    neither on PATH — measured on this machine, an absolute qmd path still died
+    with `env: node: No such file or directory`. So the child gets its own bin
+    directory prepended to PATH.
+    """
+    env = dict(os.environ)
+    env["PATH"] = str(Path(binary).parent) + os.pathsep + env.get("PATH", "")
+    try:
+        result = subprocess.run(
+            [binary, *args], capture_output=True, text=True, env=env
+        )
+    except OSError as exc:
+        return False, f"{binary}: {exc}"
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip() or f"rc={result.returncode}"
+        return False, detail
+    return True, (result.stdout or "").strip()
+
+
 def update_qmd_index():
-    """Update QMD search index and embeddings."""
+    """Refresh the qmd index and the memory embeddings. Returns (ok, reason)."""
     print("\nUpdating QMD search index...")
 
-    try:
-        # Update index
-        result = subprocess.run(
-            ["qmd", "update"],
-            capture_output=True,
-            text=True,
-            timeout=300
+    binary = resolve_qmd()
+    if not binary:
+        explicit = os.environ.get("QMD_BIN", "").strip()
+        where = f"QMD_BIN={explicit} 不可执行" if explicit else "PATH 与常见 bin 目录里都没有 qmd"
+        reason = f"找不到 qmd（{where}）。安装：{QMD_INSTALL_HINT}"
+        print(f"  ✗ {reason}")
+        return False, reason
+
+    # `qmd update` has no per-collection filter — `qmd update -c x` silently
+    # ignores the flag and refreshes every collection (measured 2026-11-27).
+    # That is a file-listing hash pass, not an embedding run, so leaving it
+    # global is cheap; the expensive half below is scoped per collection.
+    ok, detail = _run_qmd(binary, ["update"])
+    if not ok:
+        reason = f"qmd update 失败：{detail}"
+        print(f"  ✗ {reason}")
+        return False, reason
+    print("  ✓ qmd update ok（该命令没有集合过滤，刷新的是全部集合的文件索引）")
+
+    failures = []
+    timeout = embed_timeout_minutes()
+    for collection in memory_collections():
+        # `qmd embed` 只认第一个 -c，所以一次一个集合。
+        ok, detail = _run_qmd(
+            binary, ["embed", "-c", collection, "--timeout", timeout]
         )
-
-        if result.returncode == 0:
-            print("  ✓ QMD index updated")
+        if ok:
+            print(f"  ✓ embed {collection} ok")
         else:
-            print(f"  ⚠ QMD update warning: {result.stderr}")
-    except FileNotFoundError:
-        print("  ⚠ QMD not found - skipping index update")
-        print("    Install QMD: bun install -g github:tobi/qmd")
-        return False
-    except subprocess.TimeoutExpired:
-        print("  ⚠ QMD update timed out")
-        return False
-    except Exception as e:
-        print(f"  ⚠ QMD update error: {e}")
-        return False
+            failures.append(f"{collection}: {detail}")
+            print(f"  ✗ embed {collection} 失败：{detail}")
 
-    # Update embeddings
-    print("Rebuilding vector embeddings...")
-    try:
-        result = subprocess.run(
-            ["qmd", "embed"],
-            capture_output=True,
-            text=True,
-            timeout=600
-        )
-
-        if result.returncode == 0:
-            print("  ✓ Vector embeddings rebuilt")
-        else:
-            print(f"  ⚠ QMD embedding warning: {result.stderr}")
-    except subprocess.TimeoutExpired:
-        print("  ⚠ QMD embedding rebuild timed out")
-        return False
-    except Exception as e:
-        print(f"  ⚠ QMD embedding error: {e}")
-        return False
-
-    return True
+    if failures:
+        return False, "; ".join(failures)
+    return True, ""
 
 
-def main():
-    skip_qmd = "--skip-qmd" in sys.argv
-    args = [arg for arg in sys.argv[1:] if arg != "--skip-qmd"]
+def main(argv=None):
+    args = list(sys.argv[1:] if argv is None else argv)
+    skip_qmd = "--skip-qmd" in args
+    args = [arg for arg in args if arg != "--skip-qmd"]
 
-    # Handle 0 or 1 arguments
+    # Handle 0 or 1 positional arguments
     if len(args) > 1:
-        print("Usage: python weekly_synthesis.py [base_path] [--skip-qmd]")
+        print("Usage: python3 weekly_synthesis.py [base_path] [--skip-qmd]")
         print("If base_path is not provided, uses PARA_MEMORY_ROOT environment variable.")
         print("If environment variable not set, defaults to ~/para-memory/knowledge.")
-        sys.exit(1)
-    
-    base_path_arg = args[0] if len(args) == 1 else None
-    base_path = get_base_path(base_path_arg)
+        return 1
+
+    base_path = get_base_path(args[0] if args else None)
 
     if not base_path.exists():
         print(f"Error: Path not found: {base_path}")
-        sys.exit(1)
+        return 1
 
     print("Running weekly synthesis...")
 
     # Find all entity directories (those with items.json)
-    entity_paths = []
-    for items_file in base_path.rglob("items.json"):
-        entity_paths.append(items_file.parent)
+    entity_paths = [items_file.parent for items_file in base_path.rglob("items.json")]
 
     total_hot = total_warm = total_cold = 0
 
@@ -226,16 +302,23 @@ def main():
         total_cold += cold
         print(f"  ✓ {entity_path.name}: {hot} hot, {warm} warm, {cold} cold")
 
-    print(f"\n✓ Synthesis complete!")
-    print(f"  Total: {total_hot} hot, {total_warm} warm, {total_cold} cold facts")
+    print(f"\n  Total: {total_hot} hot, {total_warm} warm, {total_cold} cold facts")
     print(f"  Processed {len(entity_paths)} entities")
 
-    # Update QMD index unless skipped
-    if not skip_qmd:
-        update_qmd_index()
-    else:
-        print("\n⚠ Skipped QMD update (--skip-qmd flag)")
+    if skip_qmd:
+        print("\n⚠ Skipped QMD update (--skip-qmd flag)：索引未更新")
+        return 0
+
+    ok, reason = update_qmd_index()
+    if ok:
+        print("\n✓ Synthesis complete")
+        return 0
+
+    print("\n✗ Summary files regenerated, but 索引未更新：")
+    print(f"  {reason}")
+    print("  搜索到的仍是旧索引。修好 qmd 后重跑，或加 --skip-qmd 明确跳过。")
+    return 1
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
