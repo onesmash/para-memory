@@ -221,13 +221,13 @@ qmd embed -f  # Force full re-embedding
 
 **Command not found**
 - 确认 npm 全局 bin 在 PATH 里（`npm prefix -g` 下的 `bin`）
-- 确认 Node >= 22.6：`node --version`
-- 重装：`npm install -g github:onesmash/qmd#cloud-api-2.9`
+- 确认 Node >= 22：`node --version`
+- 重装：`npm install -g @tobilu/qmd@2.9.0`
 
 **Poor semantic search results**
-- Check model configuration: `~/.config/qmd/index.yml` 的 `models:` 段；
-  凭据是否就位看环境变量（`echo ${SILICONFLOW_API_KEY:+set}`）
-- Rebuild embeddings: `qmd embed -f`
+- `~/.config/qmd/index.yml` 里**不该有** `models:` 段；有的话删掉，走内置默认模型
+- 向量是不是用别的模型生成的：`qmd status` 看 Pending / Vectors，换过模型就 `qmd embed -f`
+- 首次跑要注意模型是否下完（`ls ~/.cache/qmd/models/`，三个 gguf 共约 2.13 GB）
 
 **Out of date results**
 - Update index: `qmd update`
