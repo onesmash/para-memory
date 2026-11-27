@@ -246,6 +246,67 @@ class CapturePathTest(unittest.TestCase):
         )
         self.assertIn("今天的转录正文", earlier.read_text(encoding="utf-8"))
 
+    def test_txt_capture_never_overwrites_a_file_that_belongs_to_a_session(self):
+        """GLM 复审 P1 的回归点：无 id 的 txt 不许整份覆盖「头部有主」的会话文件。"""
+        self.sessions.mkdir(parents=True, exist_ok=True)
+        owned = self.sessions / "2026-01-01-ab-12345-d41d-session.md"
+        owned.write_text(
+            "# Session: demo\n**Session:** ab-12345-xyz-987\n**Date:** 2026-01-01\n"
+            "**Started:** 09:00\n\n---\n\n**User**: 会话 A 的唯一副本\n",
+            encoding="utf-8",
+        )
+
+        txt = self.root / "ab.12345.txt"
+        txt.write_text("raw txt content B\n", encoding="utf-8")
+        result = self.run_hook(transcript=txt, session_id=None)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            owned.read_text(encoding="utf-8").splitlines()[-1],
+            "**User**: 会话 A 的唯一副本",
+            "无 id 的 txt 捕获把另一个会话的文件整份覆盖了（该会话就此消失）",
+        )
+        self.assertEqual(
+            len(self.session_files()), 2, f"txt 应该另开一个文件：{[f.name for f in self.session_files()]}"
+        )
+
+    def test_txt_capture_is_stable_when_the_plain_name_is_taken(self):
+        """名字被占时用的后缀必须稳定：同一份 txt 连跑两次不能每次换名。"""
+        self.sessions.mkdir(parents=True, exist_ok=True)
+        (self.sessions / "2026-01-01-ab-12345-d41d-session.md").write_text(
+            "# Session: demo\n**Session:** ab-12345-xyz-987\n\n---\n\n别人的会话\n",
+            encoding="utf-8",
+        )
+        txt = self.root / "ab.12345.txt"
+        txt.write_text("第一版正文\n", encoding="utf-8")
+
+        self.run_hook(transcript=txt, session_id=None)
+        txt.write_text("第二版正文\n", encoding="utf-8")
+        self.run_hook(transcript=txt, session_id=None)
+
+        names = [f.name for f in self.session_files()]
+        self.assertEqual(
+            len(names), 2, f"同一份 txt 每次落一个新文件：{sorted(names)}"
+        )
+
+    def test_a_very_long_slug_does_not_hide_the_identity_line(self):
+        """身份行在 `# Session: {slug}` 之后：读窗口按行读，才不会被长 slug 挤出去。"""
+        sys.path.insert(0, str(SCRIPTS))
+        import save_chat_history as capture
+
+        self.sessions.mkdir(parents=True, exist_ok=True)
+        path = self.sessions / "2025-01-01-sess0001-session.md"
+        path.write_text(
+            f"# Session: {'x' * 5000}\n**Session:** {SESSION_ID}\n\n---\n\n正文\n",
+            encoding="utf-8",
+        )
+
+        found = capture.find_session_file(
+            self.sessions, SESSION_ID, "sess0001", "2026-11-27"
+        )
+
+        self.assertEqual(found, path, "超长 slug 把身份行挤出了读取窗口，会话被当成新的")
+
     def test_transcripts_without_a_session_id_do_not_merge(self):
         """没有 session id 时按 transcript 路径区分，不能都落进 `unknown`。"""
         self.sessions.mkdir(parents=True, exist_ok=True)
