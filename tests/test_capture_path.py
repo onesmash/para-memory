@@ -23,8 +23,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = REPO_ROOT / "skills" / "para-memory" / "scripts"
 SCRIPT = SCRIPTS / "save_chat_history.py"
 
-sys.path.insert(0, str(SCRIPTS))
-import save_chat_history  # noqa: E402
 SESSION_ID = "sess0001-aaaa-bbbb"
 
 
@@ -182,6 +180,9 @@ class CapturePathTest(unittest.TestCase):
     # -- P1：文件名前缀相同 ≠ 同一个会话 --------------------------------
     def test_two_sessions_sharing_a_filename_prefix_keep_separate_files(self):
         """`ab-12345…` 与 `ab.12345…` 净化后都变 `ab-123`：不许后到的整份覆盖先到的。"""
+        sys.path.insert(0, str(SCRIPTS))
+        import save_chat_history  # 按需导入：本文件在 3.9 下也必须能被收集
+
         first_id, second_id = "ab-12345aaaa", "ab.12345bbbb"
         self.assertEqual(
             save_chat_history.get_short_id(first_id),
