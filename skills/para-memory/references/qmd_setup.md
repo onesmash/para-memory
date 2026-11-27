@@ -8,27 +8,47 @@ QMD 跑在**官方 Node** 上（不再需要 bun）：源码直接由 Node 做�
 
 ```bash
 # 需要 Node >= 22.6（推荐 24 LTS）
-npm install -g github:onesmash/qmd#node-runtime
+npm install -g github:onesmash/qmd#cloud-api-2.9
 ```
 
 装完 `qmd --help` 能出用法即可；npm 的全局 bin 目录要在 `PATH` 里。
 
-说明两点：
+说明三点：
 
-- **分支**：`node-runtime` 是「云 API（SiliconFlow）+ 官方 Node」的那条线。仓库的 `main`
-  目前停在一个编译不过的上游合并体上，不要用 `main` 的源码装。
+- **分支**：`main` 现在就是上游 `tobi/qmd`（2.9.0，本身就是官方 Node + `better-sqlite3`）。
+  我们这侧只多了**云 API** 那一条线，放在 `cloud-api-2.9` 分支上：远程 embedding 上游
+  已有（`http(s)://base#model`），我们补的是**通用的远程 rerank**（`/rerank`），
+  因为上游原来只认 TypeSafe 一家。
 - **SQLite**：数据库走 `better-sqlite3`（自带 FTS5，且允许加载扩展），
   **不再需要 Homebrew SQLite** 那一步。
+- 旧的 `node-runtime` 分支已作废（它做的是 Bun→Node 迁移，上游自己已经做完了）。
 
 ## Initial Configuration
 
-Configure API access for embeddings and semantic features:
+模型写在全局配置 `~/.config/qmd/index.yml` 的 `models:` 段里。远程端点用
+`http(s)://API-base#模型ID` 的写法，**凭据只写环境变量名，不写值**：
 
-```bash
-qmd init
+```yaml
+models:
+  embed: https://api.siliconflow.cn/v1#Qwen/Qwen3-Embedding-0.6B
+  embedOptions:
+    dimensions: 1024          # 必须与模型输出维度一致
+    apiKeyEnv: SILICONFLOW_API_KEY
+  rerank: https://api.siliconflow.cn/v1#Qwen/Qwen3-Reranker-0.6B
+  rerankOptions:
+    apiKeyEnv: SILICONFLOW_API_KEY
+  # 本地 query-expansion 模型（远程 generate 目前不支持，留默认或填本地 GGUF）
+  generate: hf:tobil/qmd-query-expansion-1.7B-gguf/qmd-query-expansion-1.7B-q4_k_m.gguf
 ```
 
-This creates `~/.config/qmd/api.yml`. Add your SiliconFlow API credentials to enable embeddings, query expansion, and reranking.
+然后把 key 放进环境（不要写进配置文件）：
+
+```bash
+export SILICONFLOW_API_KEY=...     # 放进 shell profile，或由密钥管理注入
+```
+
+换 embedding 模型会让已有向量失效（向量空间由「端点+模型+维度+revision」共同决定），
+旧索引需要重跑一次 `qmd embed`。`qmd status` 会显示还有多少待嵌入。
 
 ## Setting Up Collections
 
@@ -212,10 +232,11 @@ qmd embed -f  # Force full re-embedding
 **Command not found**
 - 确认 npm 全局 bin 在 PATH 里（`npm prefix -g` 下的 `bin`）
 - 确认 Node >= 22.6：`node --version`
-- 重装：`npm install -g github:onesmash/qmd#node-runtime`
+- 重装：`npm install -g github:onesmash/qmd#cloud-api-2.9`
 
 **Poor semantic search results**
-- Check API configuration: `~/.config/qmd/api.yml`
+- Check model configuration: `~/.config/qmd/index.yml` 的 `models:` 段；
+  凭据是否就位看环境变量（`echo ${SILICONFLOW_API_KEY:+set}`）
 - Rebuild embeddings: `qmd embed -f`
 
 **Out of date results**
