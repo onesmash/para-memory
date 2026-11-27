@@ -4,7 +4,13 @@
 
 为什么要有这个文件：`python3 -m unittest discover -s tests` 全绿只证明「现在是绿的」，
 不证明这些测试有分辨力。把每处修法单独退回旧写法、看对应测试按名字报红，才知道
-测试真的盯着这件事。Lang 里的每一行都对应 2026-11-27 review 的一个 finding。
+测试真的盯着这件事。
+
+隔离方式：变体跑在一个 `git worktree` 临时副本里，**不碰工作区**。上一版的实现在原地
+打补丁再在 finally 里还原，被 kill -9 打断时仓库会留在被破坏的状态；临时副本没有这个
+窗口（最坏是一次 `git worktree prune`）。
+
+因此变体作用于 **HEAD**：先提交再跑。工作区有未提交改动时会打印提示（不阻止）。
 
 跑：python3 tests/destruct_variants.py          （全部通过 exit 0，否则 exit 1）
 也可以指定其中几条：python3 tests/destruct_variants.py C8 C7
@@ -14,16 +20,16 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-SCRIPTS = REPO / "skills" / "para-memory" / "scripts"
-QUERY = REPO / "skills" / "para-memory-query" / "scripts"
 
-CAPTURE = SCRIPTS / "save_chat_history.py"
-SYNTHESIS = SCRIPTS / "weekly_synthesis.py"
-HOOKS = SCRIPTS / "install_hooks.py"
-TIMELINE = QUERY / "search_timeline.sh"
+CAPTURE = "skills/para-memory/scripts/save_chat_history.py"
+SYNTHESIS = "skills/para-memory/scripts/weekly_synthesis.py"
+HOOKS = "skills/para-memory/scripts/install_hooks.py"
+ATOMIC = "skills/para-memory/scripts/atomic_io.py"
+TIMELINE = "skills/para-memory-query/scripts/search_timeline.sh"
 
 VARIANTS = [
     {
@@ -48,8 +54,34 @@ VARIANTS = [
         "expect": "第二次触发后正文里仍然没有新消息",
     },
     {
+        "id": "P1",
+        "why": "会话归属退回「按文件名前缀」——前缀相同的两个会话互相覆盖",
+        "file": CAPTURE,
+        "old": '                if read_header_value(read_head(path), "Session") == session_id:',
+        "new": "                if True:",
+        "test": "tests.test_capture_path.CapturePathTest.test_two_sessions_sharing_a_filename_prefix_keep_separate_files",
+        "expect": "两个不同会话被并成一个文件",
+    },
+    {
+        "id": "P2-txt",
+        "why": "txt 分支退回自己拼日期——跨天时又开一个文件",
+        "file": CAPTURE,
+        "old": (
+            "        session_file = find_session_file(\n"
+            '            sessions_dir, "", get_short_id(p.stem), now.strftime("%Y-%m-%d")\n'
+            "        )\n"
+        ),
+        "new": (
+            "        session_file = sessions_dir / "
+            "f\"{now.strftime('%Y-%m-%d')}-{get_short_id(p.stem)}-session.md\"\n"
+        ),
+        "test": "tests.test_capture_path.CapturePathTest.test_txt_capture_follows_the_same_file_rule",
+        "expect": "txt 分支在跨天时又开了一个文件",
+    },
+    {
         "id": "C2",
         "why": "去掉 __future__ annotations —— 3.9 上 import 期就 TypeError",
+        "note": "需要本机存在 <3.10 的解释器才有分辨力（本机 /usr/bin/python3 = 3.9.6）",
         "file": CAPTURE,
         "old": "from __future__ import annotations\n\nimport json",
         "new": "import json",
@@ -60,7 +92,7 @@ VARIANTS = [
         "id": "C3",
         "why": "注册命令退回裸 `python` —— 本机没有这个命令",
         "file": HOOKS,
-        "old": '    return f"{shlex.quote(sys.executable)} {shlex.quote(str(script_path))}"',
+        "old": '    return f"{shlex.quote(str(exe))} {shlex.quote(str(script_path))}"',
         "new": '    return f"python {script_path}"',
         "test": "tests.test_install_hooks.InstallHooksTest.test_registered_command_uses_an_absolute_interpreter",
         "expect": "的解释器不是绝对路径",
@@ -99,16 +131,19 @@ VARIANTS = [
         "id": "C5",
         "why": "qmd 失败退回 rc=0 —— 索引没更新却说完成",
         "file": SYNTHESIS,
-        "old": (
-            '    print("  搜索到的仍是旧索引。修好 qmd 后重跑，或加 --skip-qmd 明确跳过。")\n'
-            "    return 1\n"
-        ),
-        "new": (
-            '    print("  搜索到的仍是旧索引。修好 qmd 后重跑，或加 --skip-qmd 明确跳过。")\n'
-            "    return 0\n"
-        ),
+        "old": "    return 0 if index_ok else 1\n",
+        "new": "    return 0 if True else 1\n",
         "test": "tests.test_synthesis.SynthesisTest.test_failed_index_refresh_exits_nonzero",
         "expect": "索引刷新失败却报成功",
+    },
+    {
+        "id": "C6",
+        "why": "安装提示退回 bun —— 与「只走上游 npm 包」冲突",
+        "file": SYNTHESIS,
+        "old": 'QMD_INSTALL_HINT = "npm install -g @tobilu/qmd"',
+        "new": 'QMD_INSTALL_HINT = "bun install -g github:tobi/qmd"',
+        "test": "tests.test_synthesis.SynthesisTest.test_missing_qmd_points_at_the_upstream_package",
+        "expect": "bun install -g github:tobi/qmd",
     },
     {
         "id": "C7",
@@ -120,6 +155,36 @@ VARIANTS = [
         "expect": "OSError not raised",
     },
     {
+        "id": "P2-entity",
+        "why": "坏 items.json 退回不兜底 —— 后面的实体全都没 summary",
+        "file": SYNTHESIS,
+        "old": "        except (OSError, ValueError, KeyError, TypeError) as exc:",
+        "new": "        except ZeroDivisionError as exc:",
+        "test": "tests.test_synthesis.SynthesisTest.test_one_broken_items_json_does_not_stop_the_other_entities",
+        "expect": "坏实体没有被点名",
+    },
+    {
+        "id": "P2-overview",
+        "why": "overview 退回「按 ## Hot Facts 切一半」——旧格式 summary 整份复活",
+        "file": SYNTHESIS,
+        "old": '        overview = extract_overview(summary_path.read_text(encoding="utf-8"))',
+        "new": (
+            '        overview = summary_path.read_text(encoding="utf-8")'
+            '.split("## Hot Facts", 1)[0].strip()'
+        ),
+        "test": "tests.test_synthesis.SynthesisTest.test_a_summary_without_markers_is_rebuilt_not_carried_over",
+        "expect": "旧格式 summary 被整份当成 overview 保留了下来",
+    },
+    {
+        "id": "P2-mode",
+        "why": "原子写退回不保留权限 —— settings.json 被改成 0600",
+        "file": ATOMIC,
+        "old": "    os.chmod(tmp, _target_mode(target))\n    os.replace(tmp, target)",
+        "new": "    os.replace(tmp, target)",
+        "test": "tests.test_atomic_io.AtomicWrites.test_an_existing_file_keeps_its_mode",
+        "expect": "原子写把文件权限改成了 mkstemp 的 0600",
+    },
+    {
         "id": "C8",
         "why": "date 模式退回精确 <date>.md —— 捕获写的会话文件全查不到",
         "file": TIMELINE,
@@ -128,42 +193,75 @@ VARIANTS = [
         "test": "tests.test_query_scripts.TimelineSearchExitCodes.test_date_mode_reads_capture_files_for_that_day",
         "expect": "按日期查不到当天的会话文件",
     },
+    {
+        "id": "P2-date-check",
+        "why": "date 退回不校验格式 —— 短日期漏到 20 号",
+        "file": TIMELINE,
+        "old": (
+            '        if ! [[ "$DATE" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then\n'
+            '            echo "Invalid date: ${DATE}（需要 YYYY-MM-DD）" >&2\n'
+            "            exit 1\n"
+            "        fi\n"
+        ),
+        "new": "        true\n",
+        "test": "tests.test_query_scripts.TimelineSearchExitCodes.test_date_mode_rejects_a_partial_date",
+        "expect": "二十号的会话",
+    },
+    {
+        "id": "P2-keyword-store",
+        "why": "keyword 退回把 grep rc>=2 当零命中 —— store 坏了报成「没有匹配」",
+        "file": TIMELINE,
+        "old": '        require_store\n        echo "Searching for keyword: $KEYWORD"',
+        "new": '        echo "Searching for keyword: $KEYWORD"',
+        "test": "tests.test_query_scripts.TimelineSearchExitCodes.test_keyword_against_a_missing_store_is_not_reported_as_no_match",
+        "expect": "Memory store not found",
+    },
+    {
+        "id": "P3-bash32",
+        "why": "变量退回不加大括号且紧贴全角括号 —— bash 3.2 吞字节",
+        "file": TIMELINE,
+        "old": 'echo "Invalid date: ${DATE}（需要 YYYY-MM-DD）" >&2',
+        "new": 'echo "Invalid date: $DATE（需要 YYYY-MM-DD）" >&2',
+        "test": "tests.test_shell_hygiene.ShellScripts.test_variables_are_braced_before_multibyte_text",
+        "expect": "改成 ${VAR}",
+    },
 ]
 
-COLUMNS = ("id", "red", "matched", "why")
+
+def git(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", *args], cwd=str(REPO), capture_output=True, text=True)
 
 
-def run_variant(variant: dict) -> dict:
-    path = variant["file"]
+def run_variant(variant: dict, worktree: Path) -> dict:
+    path = worktree / variant["file"]
     original = path.read_text(encoding="utf-8")
     if variant["old"] not in original:
         return {
             "id": variant["id"],
             "red": False,
             "matched": False,
-            "why": f"锚点已不在 {path.name} 里（代码变了，变体过期）",
+            "why": f"锚点已不在 {variant['file']} 里（代码变了，变体过期）",
         }
 
-    patched = original.replace(variant["old"], variant["new"], 1)
+    path.write_text(original.replace(variant["old"], variant["new"], 1), encoding="utf-8")
     try:
-        path.write_text(patched, encoding="utf-8")
         result = subprocess.run(
             [sys.executable, "-m", "unittest", variant["test"]],
-            cwd=str(REPO),
+            cwd=str(worktree),
             capture_output=True,
             text=True,
         )
     finally:
+        # 副本是抛弃式的，还原只是为了下一条变体从干净状态开始
         path.write_text(original, encoding="utf-8")
 
     output = result.stdout + result.stderr
-    went_red = result.returncode != 0
-    matched = variant["expect"] in output
     return {
         "id": variant["id"],
-        "red": went_red,
-        "matched": matched,
+        "red": result.returncode != 0,
+        "matched": variant["expect"] in output,
         "why": variant["why"],
+        "note": variant.get("note", ""),
         "output": output,
     }
 
@@ -175,16 +273,32 @@ def main(argv: list[str]) -> int:
         print(f"没有匹配的变体：{sorted(wanted)}")
         return 2
 
-    results = [run_variant(v) for v in selected]
+    dirty = git("status", "--porcelain").stdout.strip()
+    if dirty:
+        print("注意：工作区有未提交改动；变体作用于 HEAD，不是磁盘上的版本。\n")
+
+    sandbox = Path(tempfile.mkdtemp(prefix="pm-destruct-"))
+    worktree = sandbox / "repo"
+    add = git("worktree", "add", "--detach", str(worktree), "HEAD")
+    if add.returncode != 0:
+        print(f"未判定：建不了临时 worktree（{add.stderr.strip()}）")
+        return 2
+
+    try:
+        results = [run_variant(v, worktree) for v in selected]
+    finally:
+        git("worktree", "remove", "--force", str(worktree))
+        git("worktree", "prune")
 
     failed = 0
     for result in results:
         ok = result["red"] and result["matched"]
         failed += 0 if ok else 1
         verdict = "PASS" if ok else "FAIL"
+        note = f"  [{result['note']}]" if result.get("note") else ""
         print(
-            f"{verdict}  {result['id']:<6}  red={result['red']!s:<5} "
-            f"按名报红={result['matched']!s:<5}  {result['why']}"
+            f"{verdict}  {result['id']:<14}  red={result['red']!s:<5} "
+            f"按名报红={result['matched']!s:<5}  {result['why']}{note}"
         )
         if not ok:
             tail = "\n".join((result.get("output") or "").strip().splitlines()[-8:])
