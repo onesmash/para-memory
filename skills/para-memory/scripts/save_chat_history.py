@@ -19,6 +19,7 @@ Two rules this file has to keep, because it runs unattended inside a host hook:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -42,6 +43,18 @@ def get_short_id(session_id: str) -> str:
     """A filename-safe prefix of the session id (also keeps globs literal)."""
     safe = re.sub(r"[^A-Za-z0-9_-]", "-", (session_id or "")[:8]).strip("-")
     return safe or "unknown"
+
+
+def session_short_id(session_id: str, transcript_path: Path) -> str:
+    """Filename prefix: the session id when there is one, else the transcript's hash.
+
+    Two captures that carry no session id must not land in the same file — that
+    would be the same "two sessions, one file" bug in a different disguise.
+    """
+    if session_id:
+        return get_short_id(session_id)
+    digest = hashlib.sha1(str(transcript_path).encode("utf-8")).hexdigest()
+    return f"noid-{digest[:6]}"
 
 
 # ---------------------------------------------------------------------------
@@ -181,24 +194,65 @@ def read_header_value(content: str, key: str) -> str:
     return match.group(1).strip() if match else ""
 
 
-def find_session_file(sessions_dir: Path, short_id: str, today: str) -> Path:
+def read_head(path: Path, limit: int = 4096) -> str:
+    """The top of a captured file, where its identity is written."""
+    with path.open("r", encoding="utf-8", errors="replace") as handle:
+        return handle.read(limit)
+
+
+def find_session_file(
+    sessions_dir: Path, session_id: str, short_id: str, today: str
+) -> Path:
     """The file this session already owns, or the name a brand-new one gets.
+
+    Ownership is decided by the `**Session:**` line *inside* the file, not by the
+    filename. `get_short_id` truncates to eight characters and normalises the rest
+    to `-`, so `ab-12345…` and `ab.12345…` both shorten to `ab-12345`: matching on
+    the name would let the second session re-render away the first one's whole
+    file. With the id in the header, a same-prefix session gets its own file.
 
     A session can still be running when the clock rolls past midnight. The first
     capture names the file after the day it started, so later captures must land
     in that same file — otherwise one conversation ends up split across two files
     and the later one looks like it lost its opening turns.
+
+    Files captured before the header existed have no id to match; they are only
+    adopted by a caller that has no id either (the `.txt` path). A session that
+    *does* have an id never adopts them, so an old file cannot be hijacked.
     """
     default = sessions_dir / f"{today}-{short_id}-session.md"
-    if short_id == "unknown" or not sessions_dir.exists():
+    if not sessions_dir.exists() or short_id == "unknown":
         return default
-    existing = sorted(sessions_dir.glob(f"*-{short_id}-session.md"))
-    return existing[0] if existing else default
+
+    # Both shapes: `…-<short>-session.md` and the disambiguated `…-<short>-<digest>-session.md`.
+    candidates = sorted(sessions_dir.glob(f"*-{short_id}-session.md")) + sorted(
+        sessions_dir.glob(f"*-{short_id}-*-session.md")
+    )
+    if not candidates:
+        return default
+
+    if session_id:
+        for path in candidates:
+            try:
+                if read_header_value(read_head(path), "Session") == session_id:
+                    return path
+            except OSError:
+                continue
+        if default.exists():
+            # The plain name belongs to a different session; keep both by giving
+            # this one a suffix derived from its own id (stable across captures).
+            digest = hashlib.sha1(session_id.encode("utf-8")).hexdigest()[:4]
+            return sessions_dir / f"{today}-{short_id}-{digest}-session.md"
+        return default
+
+    # No session id (a .txt transcript): the name prefix is all there is.
+    return candidates[0]
 
 
 def render_session_file(
     *,
     slug: str,
+    session_id: str,
     day: str,
     project: str,
     started: str,
@@ -212,8 +266,10 @@ def render_session_file(
     files_lines = (
         "\n".join(f"- {f}" for f in files_modified) if files_modified else "—"
     )
+    identity = f"**Session:** {session_id}\n" if session_id else ""
     return (
         f"# Session: {slug}\n"
+        f"{identity}"
         f"**Date:** {day}\n"
         f"**Project:** {project}\n"
         f"**Started:** {started}\n"
@@ -232,9 +288,12 @@ def run(transcript_path: str, fallback_meta: dict | None = None) -> None:
     sessions_dir.mkdir(parents=True, exist_ok=True)
     now = datetime.now()
 
-    # .txt files: copy content directly
+    # .txt files: copy content directly (same naming rule as the JSONL path, so a
+    # transcript captured across midnight stays in the file it started in)
     if p.suffix.lower() == ".txt":
-        session_file = sessions_dir / f"{now.strftime('%Y-%m-%d')}-{get_short_id(p.stem)}-session.md"
+        session_file = find_session_file(
+            sessions_dir, "", get_short_id(p.stem), now.strftime("%Y-%m-%d")
+        )
         copy_file_atomic(p, session_file)
         print(f"[SessionEnd] Copied txt to session file: {session_file}", file=sys.stderr)
         return
@@ -248,8 +307,8 @@ def run(transcript_path: str, fallback_meta: dict | None = None) -> None:
 
     today = now.strftime("%Y-%m-%d")
     current_time = now.strftime("%H:%M")
-    short_id = get_short_id(meta["session_id"])
-    session_file = find_session_file(sessions_dir, short_id, today)
+    short_id = session_short_id(meta["session_id"], p)
+    session_file = find_session_file(sessions_dir, meta["session_id"], short_id, today)
     project = os.path.basename(meta["cwd"]) if meta["cwd"] else "unknown"
     slug = meta["slug"] or short_id
 
@@ -264,6 +323,7 @@ def run(transcript_path: str, fallback_meta: dict | None = None) -> None:
         session_file,
         render_session_file(
             slug=slug,
+            session_id=meta["session_id"],
             day=day,
             project=project,
             started=started,
