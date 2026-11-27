@@ -86,7 +86,7 @@ P1 与 P2 都发生在写入路径上，很容易被当成「同一个失败家�
 | C7 summary.md 非原子 | `write_text` 覆写，写一半崩即半截文件 | `…::test_crash_during_summary_write_keeps_the_previous_version` | 退回 `write_text` |
 | C8 date 模式断链 | `search_timeline.sh date 2026-11-27` → rc=1（捕获写的是 `<date>-<id>-session.md`） | `tests/test_query_scripts.py::test_date_mode_reads_capture_files_for_that_day` | 退回 `files=("$DIR/$DATE.md")` |
 
-一条命令重跑全部破坏变体：`python3 tests/destruct_variants.py`（18/18 各自按名字红；跑在
+一条命令重跑全部破坏变体：`python3 tests/destruct_variants.py`（21/21 各自按名字红；跑在
 `git worktree` 临时副本里，不碰工作区）。它的意义是：
 全绿本身不证明这些测试有分辨力，必须看到每处修法退回旧写法时**对应的**那条测试报红。
 
@@ -117,3 +117,20 @@ qmd CLI 的三条实测约束（`-c` 对 `update` 无效、`embed` 只认第一�
 - **BSD grep（macOS）对不存在的目录返回 1**，和「零命中」一样；GNU grep 才返回 2。所以
   `search_timeline.sh` 的 `require_store` 是主守卫，`case "$rc"` 只是 Linux 侧的保险。
 - **bash 3.2 的 `$VAR` 紧贴多字节字符会吞字节**，且不报错 —— 只能靠 `${VAR}` 与机器扫描。
+
+## 第三轮：一条 P1 回归 + 三处 P2/P3（同一条路径，GLM-5.3 增量复审）
+
+第二轮把「按头部认领」只用在了有 id 的分支上，无 id 的分支仍然是 `candidates[0]`；而候选集
+新增的 `*-<short>-*-session.md` 会把「带 digest 后缀、头部写着别人 id」的文件也捞进来。于是
+一个 `.txt` 捕获能把另一个会话的文件整份覆盖 —— 上一轮 P1 的同款，换了一条路径复发。
+
+| 缺陷 | 症状（实测） | 守门测试 | 破坏变体 |
+|---|---|---|---|
+| P1 txt 覆盖有主文件 | 预置 `…-ab-12345-d41d-session.md`（头部 `ab-12345-xyz-987`），跑 `ab.12345.txt` 后该文件变成 raw txt，会话 A 消失 | `test_capture_path.py::test_txt_capture_never_overwrites_a_file_that_belongs_to_a_session` | 退回 `return candidates[0]` |
+| P2 overview 切进代码围栏 | Overview 里 ```md 围栏含 `## ` 行时，围栏后半与 `## My Notes` 整节被静默丢弃 | `test_synthesis.py::test_a_code_fence_inside_the_overview_survives` | 退回正则截到第一个 `## ` |
+| P2 弱证据 | C6 与 keyword 两条变体的 `expect` 取自「旧行为输出里恰好出现的串」，相邻原因也可能命中 | 两条断言补自定义消息，`expect` 改取消息本身 | — |
+| P3 身份行读取窗口 | `read_head` 按字节截 4096，超长 slug 会把 `**Session:**` 挤出窗口，会话被当成新的 | `…::test_a_very_long_slug_does_not_hide_the_identity_line` | 退回 `handle.read(4096)` |
+| P3 升级后同会话裂两份 | 有 id 的会话不认领无头旧文件，旧文件留成陈旧副本（不丢数据，docstring 已声明取舍） | 未修，记录在案 | — |
+
+**这一轮学到的**：扩大一个候选集（多一个 glob）时，要把**所有**消费它的分支都重读一遍。
+有 id 的分支加了头部闸门，无 id 的分支没有 —— 修好一条路径，顺手给另一条路径递了更宽的输入。

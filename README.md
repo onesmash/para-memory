@@ -121,7 +121,7 @@ Three sentences, as required by the S5 close-out: what the property is, which co
 3. **Coverage.** `spec/` models the write path of `update_entity.py`; the counterexample-to-test bridge lives in `tests/test_write_path.py`. The sync commit is recorded in [`spec/PROPERTY-REGISTER.md`](spec/PROPERTY-REGISTER.md).
 
 The capture, query and synthesis paths are guarded by ordinary unit tests instead of invariants:
-`python3 -m unittest discover -s tests` runs the whole guard suite (56 tests), and
+`python3 -m unittest discover -s tests` runs the whole guard suite (60 tests), and
 `python3 tests/destruct_variants.py` re-breaks each fixed defect one at a time (in a throwaway
 `git worktree`, never in your checkout) and requires the matching test to go red — a green suite
 that no change can turn red proves nothing. Exit codes are part of the contract:
